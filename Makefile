@@ -16,6 +16,8 @@ endif
 
 all: main.c
 	$(CC) $(CFLAGS) -o pca $^ $(INC)
+upper: main.c
+	$(CC) $(CFLAGS) -o pca $^ $(INCCULA) -lblas -DCULA -DUPPER
 cula: main.c
 	$(CC) $(CFLAGS) -o pca $^ $(INCCULA) -lblas -DCULA
 mpi: main.c

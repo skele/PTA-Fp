@@ -13,6 +13,15 @@ enum CBLAS_TRANSPOSE {CblasNoTrans=111, CblasTrans=112, CblasConjTrans=113,
 enum CBLAS_UPLO  {CblasUpper=121, CblasLower=122};
 enum CBLAS_SIDE  {CblasLeft=141, CblasRight=142};
 
+struct geo_par
+{
+  double Fac,Fas;
+};
+
+struct source
+{
+  double theta_s,phi_s,Mc,fr,psi,phi0,Amp,iota;
+};
 
 struct Fp
 {
@@ -46,7 +55,7 @@ struct mypulsar
   int n_be,n_sample;
   int * backends; //points to the first toa index for each backend
   //  double 
-  double *sigma;
+  double *sigma,*oldbat;
   double rA,rgamma;
   double dmA,dmgamma;
   struct my_matrix *G,*CWN,*GNGinv,*phi_inv,*F,*H,*C,*Cinv,*L;
