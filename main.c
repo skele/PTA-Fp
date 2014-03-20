@@ -48,7 +48,7 @@
 //#define SINGLE
 //#define RUNITY
 
-//#define REDNOISE
+#define REDNOISE
 //#define POWERLAW
 //#define SWITCHEROO
 
@@ -391,7 +391,7 @@ void initialize_pulsars_fromtempo(pulsar * tempo_psrs, struct mypulsar * pulsars
 	    {
 	      pulsars[i].toa->data[j] = psr.obsn[j].bat*86400.0;
 	      if (only_res == 0)
-		pulsars[i].oldbat[j] = psr.obsn[j].bat*86400.0;
+		pulsars[i].oldbat[j] = psr.obsn[j].sat*86400.0;
 	    }
 	  if (only_res == 0)
 	    {
@@ -791,7 +791,6 @@ void add_signal(struct mypulsar *psr, pulsar * t_psr, struct parameters params, 
       //add signal to the residual
       t_psr->obsn[i].sat = (psr->oldbat[i] + (a1*geo.Fac + a2*geo.Fas)*(sn_p - sn) + (a3*geo.Fac + a4*geo.Fas)*(cs_p -cs))/86400.0;
     }
-  fprintf(stderr,"Signal added!\n");
 
 }
 #endif
@@ -1035,7 +1034,10 @@ int main(int argc, char *argv[])
 //#else
 //  culaSelectDevice(0);
 #endif
-  s = culaInitialize();
+#ifdef UPPER
+  culaSelectDevice(1);
+#endif
+s = culaInitialize();
   if(s != culaNoError)
     {
       printf("%s\n", culaGetStatusString(s));
@@ -1121,7 +1123,7 @@ int main(int argc, char *argv[])
   int changed = 1;
 
   params.omega = 3.0e-7;
-  //  pulsars[0].index = 0;
+  pulsars[0].index = 0;
   for (i = 0; i < Nplsr; i++)
     {
 #ifdef REDNOISE // values for data challenge 3 open
@@ -1144,8 +1146,8 @@ int main(int argc, char *argv[])
 
   //create array of frequencies to be investigated
   double fstep = 1e-8;
-  double fmin = 1.0e-08;
-  double fmax = (2.11e-07);
+  double fmin = 6.0e-08;
+  double fmax = (1.11e-07);
   double * h_freqs;
   int nfreqs = (int) ((fmax-fmin)/fstep);
   //int nfreqs = 1;
@@ -1169,7 +1171,10 @@ int main(int argc, char *argv[])
       source_pars.fr = params.omega/(2.0*PI);
       randomize_source(&source_pars,r);
       for (j = 0; j < Nplsr; j++)
-	add_signal(&(pulsars[j]),&(tempo_psrs[j]),params,source_pars);
+	{
+	  add_signal(&(pulsars[j]),&(tempo_psrs[j]),params,source_pars);
+	  pulsars[j].index += 2;
+	}
 
       formBatsAll(tempo_psrs,Nplsr);
       formResiduals(tempo_psrs,Nplsr,0.0);
@@ -1216,10 +1221,10 @@ int main(int argc, char *argv[])
 	  //fill up psrs with noise
 	  //      for (j = 0; j < Nplsr; j++)
 	  double tstart = omp_get_wtime();
-	  //	  pulsars[0].index += 1;
+	  pulsars[0].index += 1;
 
-	  for (i = 0; i < Nplsr; i++)
-	    compute_C_matrix(&(pulsars[i]),&params);
+	  for (j = 0; j < Nplsr; j++)
+	    compute_C_matrix(&(pulsars[j]),&params);
 
 	  double tend = omp_get_wtime();
 	  if (verbose == 3)
