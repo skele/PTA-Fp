@@ -50,6 +50,7 @@ struct my_matrix
 
 struct mypulsar
 {
+  char name[50];
   double raj,dec;
   int N,N_m,index;
   int n_be,n_sample;

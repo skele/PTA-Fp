@@ -16,9 +16,9 @@
 #include <mpi.h>
 #endif
 
-#define verbose 0
+#define verbose 2
 #define NFFT 30
-#define N_SAMPLE_MAX 20000
+#define N_SAMPLE_MAX 27000
 #define MAX_PSR 45
 #define MAX_BE 20
 
@@ -276,7 +276,9 @@ void initialize_pulsars(struct mypulsar * pulsars, char ** filenames, int Nplsr,
       //read in sampled data
       int xdim = 4+2*pulsars[i].n_be+1;
       pulsars[i].sample = my_matrix_alloc(xdim,pulsars[i].n_sample);
-      infile = fopen("J0900-3144.noise","r");
+      char infilename[100];
+      sprintf(infilename,"%s/chains_Noise/Noise_post_equal_weights.dat",pulsars[i].name);
+      infile = fopen(infilename,"r");
       for (j = 0; j < pulsars[i].n_sample; j++)
 	for (k = 0; k < xdim; k++)
 	  if (fscanf(infile,"%le",&(pulsars[i].sample->data[j*xdim + k])) == 0)
@@ -482,7 +484,11 @@ void initialize_pulsars_fromtempo(pulsar * tempo_psrs, struct mypulsar * pulsars
       //read in sampled data
 	  int xdim = 4+2*pulsars[i].n_be+1;
 	  pulsars[i].sample = my_matrix_alloc(xdim,N_SAMPLE_MAX);
-	  infile = fopen("J0900-3144.noise","r");
+	  char infilename[100];
+	  sprintf(infilename,"%s/chains_Noise/Noise_post_equal_weights.dat",pulsars[i].name);
+	  if (verbose)
+	    printf("Opening %s\n",infilename);
+	  infile = fopen(infilename,"r");
 	  j = 0;
 	  int dobreak = 0;
 	  while (1)
@@ -876,7 +882,7 @@ struct Fp compute_Fp(struct mypulsar * pulsars, struct parameters * par, int Npl
       my_vector_mult(pulsars[i].Gres,Ct,&tCt);
 
       if (verbose == 2)
-	printf("tCt %d\t%g\n",i,tCt);
+	printf("tCt %s %d\t%g\n",pulsars[i].name,i,tCt);
       coeff.tCt += 0.5*tCt;
 
       //build up the second term: tH HH Ht
@@ -910,7 +916,7 @@ struct Fp compute_Fp(struct mypulsar * pulsars, struct parameters * par, int Npl
       my_vector_mult(Ht,HHtH,&tHt);
 
       if (verbose == 2)
-	printf("tHt %d\t%g\n",i,tHt);
+	printf("tHt %s %d\t%g\n",pulsars[i].name,i,tHt);
       coeff.tHt += 0.5*tHt;
       
       my_vector_free(Ht);
@@ -1053,6 +1059,7 @@ s = culaInitialize();
   char filenames[MAX_PSR][MAX_FILELEN];
   char timfilenames[MAX_PSR][MAX_FILELEN];
   char parfilenames[MAX_PSR][MAX_FILELEN];
+  char pulsarname[MAX_PSR][MAX_FILELEN];
   int Nrows,Ndim,Ntot;
   FILE *ofile;
 
@@ -1061,9 +1068,9 @@ s = culaInitialize();
   pulsar * tempo_psrs;
   ofile = fopen(argv[1],"w");
 #ifdef UPPER
-  Nplsr = (argc-5)/2; //because 2nd and 3rd argument are frequency, amplitude and detection threshold
+  Nplsr = (argc-5); //because 2nd and 3rd argument are frequency, amplitude and detection threshold
 #else
-  Nplsr = (argc-2)/2;
+  Nplsr = (argc-2);
 #endif
   //  filenames = (char **) malloc(Nplsr*sizeof(char *));
 
@@ -1080,11 +1087,15 @@ s = culaInitialize();
     {
       //      filenames[i] = (char *) malloc(60*sizeof(char));
 #ifdef UPPER
-      strcpy(filenames[i],argv[i+5]);
-      strcpy(parfilenames[i],argv[i+5+Nplsr]);
+      strcpy(pulsarname[i],argv[i+2]);
+      sprintf(filenames[i],"%s/%s_mod.tim",pulsarname[i],pulsarname[i]);
+      sprintf(parfilenames[i],"%s/%s.par",pulsarname[i],pulsarname[i]);
 #else
-      strcpy(filenames[i],argv[i+2]);
-      strcpy(parfilenames[i],argv[i+2+Nplsr]);
+//      strcpy(filenames[i],argv[i+2]);
+//      strcpy(parfilenames[i],argv[i+2+Nplsr]);
+      strcpy(pulsarname[i],argv[i+2]);
+      sprintf(filenames[i],"%s/%s_mod.tim",pulsarname[i],pulsarname[i]);
+      sprintf(parfilenames[i],"%s/%s.par",pulsarname[i],pulsarname[i]);
 #endif
       if (verbose)
 	printf("Read %s\t%s\n",filenames[i],parfilenames[i]);
@@ -1109,6 +1120,11 @@ s = culaInitialize();
 //
   pulsars = (struct mypulsar *) malloc(Nplsr * sizeof(struct mypulsar));
 
+  for (i = 0; i < Nplsr; i++)
+    {
+      strcpy(pulsars[i].name,pulsarname[i]);
+    }
+
   gsl_rng *r;
   r = gsl_rng_alloc (gsl_rng_mt19937);
   gsl_rng_set(r,time(NULL));
@@ -1123,20 +1139,19 @@ s = culaInitialize();
   int changed = 1;
 
   params.omega = 3.0e-7;
-  pulsars[0].index = 0;
   for (i = 0; i < Nplsr; i++)
     {
 #ifdef REDNOISE // values for data challenge 3 open
       pulsars[i].rA = pow(10.0,-14.35);
       pulsars[i].rgamma = 1.52;
 #endif
+      pulsars[i].index = 100;
       compute_C_matrix(&(pulsars[i]),&params);
     }
 
 
   FILE * outfile;
   char oname[50];
-  pulsars[0].index = 0;
   double tstart_tot = omp_get_wtime();
 
   struct Fp Fp;
@@ -1145,9 +1160,9 @@ s = culaInitialize();
   printf("#\t% 6.4e% 6.4e\n",Fp.tCt,Fp.tHt);
 
   //create array of frequencies to be investigated
-  double fstep = 1e-8;
-  double fmin = 6.0e-08;
-  double fmax = (1.11e-07);
+  double fstep = 0.01;
+  double fmin = log10(1.0/params.tspan);
+  double fmax = log10(5.e-07);
   double * h_freqs;
   int nfreqs = (int) ((fmax-fmin)/fstep);
   //int nfreqs = 1;
@@ -1155,7 +1170,7 @@ s = culaInitialize();
   //fill freqs
   for (i = 0; i < nfreqs; i++)
     {
-      h_freqs[i] = fmin + i*fstep;
+      h_freqs[i] = pow(10.0,fmin + i*fstep);
     }
   int ifreq;
 
@@ -1166,14 +1181,14 @@ s = culaInitialize();
   double threshold = atof(argv[4]);
   int detected = 0;
   int total = 0;
-  for (i = 0; i < 100; i++)
+  for (i = 0; i < 3000; i++)
     {
       source_pars.fr = params.omega/(2.0*PI);
       randomize_source(&source_pars,r);
       for (j = 0; j < Nplsr; j++)
 	{
 	  add_signal(&(pulsars[j]),&(tempo_psrs[j]),params,source_pars);
-	  pulsars[j].index += 2;
+	  pulsars[j].index += 1;
 	}
 
       formBatsAll(tempo_psrs,Nplsr);
@@ -1213,47 +1228,49 @@ s = culaInitialize();
     {
       params.omega = h_freqs[rank*n_per_proc + ifreq] *2.0*PI;
 #endif
-      sprintf(oname,"%6.4e.fp",params.omega/(2.0*PI));
-      outfile = fopen(oname,"w");
-      //      pulsars[0].index = 23;
-      for (i = 0; i < 3000; i++)
-	{
-	  //fill up psrs with noise
-	  //      for (j = 0; j < Nplsr; j++)
-	  double tstart = omp_get_wtime();
-	  pulsars[0].index += 1;
-
-	  for (j = 0; j < Nplsr; j++)
-	    compute_C_matrix(&(pulsars[j]),&params);
-
-	  double tend = omp_get_wtime();
-	  if (verbose == 3)
-	    printf("compute_C_matrix\t%g\n",tend-tstart);
-	  //	  compute_Nwiggle(&(pulsars[0]));
-	  tstart = omp_get_wtime();
-
-    //    psr->Gres->data[i] = gsl_ran_gaussian(r,1.0);
-	  
-	  for (j = 0; j < Nplsr; j++)
-	    create_noise_only(&(pulsars[j]),r);
-	  tend = omp_get_wtime();
-	  if (verbose == 3)
-	    printf("create_noise \t%g\n",tend-tstart);
-	  tstart = omp_get_wtime();
-	  Fp = compute_Fp(pulsars,&params,Nplsr);
-	  tend = omp_get_wtime();
-	  if (verbose == 3)
-	    printf("compute_Fp \t%g\n",tend-tstart);
-	  fprintf(outfile,"% 6.4e\t% 6.4e\n",Fp.tCt,Fp.tHt);
-	  //printf("% 6.4e\n",Fp.tHt);
-	}
-//      double tend_tot = omp_get_wtime();
-//      if (verbose == 3)
-//	printf("Duration all evaluation:\t%g\n",tend_tot-tstart_tot);
-      fclose(outfile);
-//      Fp = compute_Fp(pulsars,&params,Nplsr);
-//      changed = 0;
-//      fprintf(ofile,"% 6.4e % 6.4e% 6.4e\n",params.omega,Fp.tCt,Fp.tHt);
+//      sprintf(oname,"%6.4e.fp",params.omega/(2.0*PI));
+//      outfile = fopen(oname,"w");
+//      //      pulsars[0].index = 23;
+//      for (i = 0; i < 3000; i++)
+//	{
+//	  //fill up psrs with noise
+//	  //      for (j = 0; j < Nplsr; j++)
+//	  double tstart = omp_get_wtime();
+//
+//	  for (j = 0; j < Nplsr; j++)
+//	    {
+//	      pulsars[j].index += 2;
+//	      compute_C_matrix(&(pulsars[j]),&params);
+//	    }
+//
+//	  double tend = omp_get_wtime();
+//	  if (verbose == 3)
+//	    printf("compute_C_matrix\t%g\n",tend-tstart);
+//	  //	  compute_Nwiggle(&(pulsars[0]));
+//	  tstart = omp_get_wtime();
+//
+//    //    psr->Gres->data[i] = gsl_ran_gaussian(r,1.0);
+//	  
+//	  for (j = 0; j < Nplsr; j++)
+//	    create_noise_only(&(pulsars[j]),r);
+//	  tend = omp_get_wtime();
+//	  if (verbose == 3)
+//	    printf("create_noise \t%g\n",tend-tstart);
+//	  tstart = omp_get_wtime();
+//	  Fp = compute_Fp(pulsars,&params,Nplsr);
+//	  tend = omp_get_wtime();
+//	  if (verbose == 3)
+//	    printf("compute_Fp \t%g\n",tend-tstart);
+//	  fprintf(outfile,"% 6.4e\t% 6.4e\n",Fp.tCt,Fp.tHt);
+//	  //printf("% 6.4e\n",Fp.tHt);
+//	}
+////      double tend_tot = omp_get_wtime();
+////      if (verbose == 3)
+////	printf("Duration all evaluation:\t%g\n",tend_tot-tstart_tot);
+//      fclose(outfile);
+      Fp = compute_Fp(pulsars,&params,Nplsr);
+      changed = 0;
+      fprintf(ofile,"% 6.4e % 6.4e% 6.4e\n",params.omega,Fp.tCt,Fp.tHt);
     }
   double tend_tot = omp_get_wtime();
   fprintf(stderr,"Duration all evaluation:\t%g\n",tend_tot-tstart_tot);

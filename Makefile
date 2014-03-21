@@ -20,6 +20,8 @@ upper: main.c
 	$(CC) $(CFLAGS) -o pca_upper $^ $(INC) -lblas -DUPPER
 uppercula: main.c
 	$(CC) $(CFLAGS) -o pca_upper $^ $(INCCULA) -lblas -DUPPER -DCULA
+fp: main.c
+	$(CC) $(CFLAGS) -o pca_Fp $^ $(INCCULA) -lblas -DCULA
 cula: main.c
 	$(CC) $(CFLAGS) -o pca $^ $(INCCULA) -lblas -DCULA
 mpi: main.c
