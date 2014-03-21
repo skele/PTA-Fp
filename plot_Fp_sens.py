@@ -32,7 +32,7 @@ for i in range(nresults):
             results_amps.append(float(fields[0]))
 fig = plt.figure()
 ax = fig.add_subplot(111)
-ax.plot(results_freqs,results_amps)
+ax.plot(results_freqs,results_amps,marker='o')
 plt.show()
 
     
