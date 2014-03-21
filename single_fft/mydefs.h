@@ -1,7 +1,7 @@
 //#include <gsl/gsl_matrix.h>
 //#include <gsl/gsl_math.h>
 
-#define NCOEFF 5
+#define NCOEFF 8
 #define NMEM 20
 
 #define THRESH 10000
@@ -52,7 +52,7 @@ struct my_matrix
 struct mypulsar
 {
   char name[50];
-  double raj,dec,tspan;
+  double raj,dec,tspan,det;
   int N,N_m,index;
   int n_be,n_sample;
   int * backends; //points to the first toa index for each backend
@@ -61,9 +61,10 @@ struct mypulsar
   double *sigma,*oldbat;
   double rA,rgamma;
   double dmA,dmgamma;
-  struct my_matrix *G,*CWN,*GNGinv,*phi_inv,*F,*H,*C,*Cinv,*L;
+  double tNt;
+  struct my_matrix *G,*CWN,*GNGinv,*phi_inv,*F,*H,*C,*Cinv,*L,*FNF;
   struct my_matrix *GF,*GH,*sample;
-  struct my_vector *toa,*res,*Gres,*obsfreqs;
+  struct my_vector *toa,*res,*Gres,*obsfreqs,*FNT;
 };
 
 struct parameters
@@ -71,6 +72,7 @@ struct parameters
   double tspan;
   double omega;
   double values[NCOEFF];
+  double tNt;
   //  double Agw, gamma_gw, fL;
   double l[NCOEFF];
   double u[NCOEFF];//double bound_Agw[2],bound_gamma_gw[2];
@@ -222,10 +224,7 @@ void my_matrix_init(struct my_matrix * mat, int m, int n)
 
 void my_matrix_set_zero(struct my_matrix *mat)
 {
-  int i,j;
-  for (j = 0; j < mat->n; j++)
-    for (i= 0; i < mat->m; i++)
-      mat->data[j*mat->m + i] = 0.0;
+  memset(mat->data,0.0,mat->n*mat->m*sizeof(double));
 }
 
 void my_matrix_cinit(struct my_matrix * mat, int m, int n)
