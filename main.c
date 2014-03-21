@@ -16,8 +16,8 @@
 #include <mpi.h>
 #endif
 
-#define verbose 2
-#define NFFT 30
+#define verbose 0
+#define NFFT 60
 #define N_SAMPLE_MAX 27000
 #define MAX_PSR 45
 #define MAX_BE 20
@@ -219,13 +219,13 @@ void initialize_pulsars(struct mypulsar * pulsars, char ** filenames, int Nplsr,
 	  fprintf(stderr,"Read error sigma\n");
       if (fscanf(infile,"%d %d %d %d\n",&(pulsars[i].N),&(pulsars[i].N_m),&(pulsars[i].n_be),&(pulsars[i].n_sample)) != 0);
       pulsars[i].res = my_vector_alloc(pulsars[i].N);
-      pulsars[i].freqs = my_vector_alloc(pulsars[i].N);
+      pulsars[i].obsfreqs = my_vector_alloc(pulsars[i].N);
       pulsars[i].backends = (int *) malloc(pulsars[i].N*sizeof(int));
       for (j = 0; j < pulsars[i].N; j++)
 	if (fscanf(infile,"%le\n",&(pulsars[i].res->data[j])) == 0)
 	  fprintf(stderr,"Read error res\n");
       for (j = 0; j < pulsars[i].N; j++)
-	if (fscanf(infile,"%le\n",&(pulsars[i].freqs->data[j])) == 0)
+	if (fscanf(infile,"%le\n",&(pulsars[i].obsfreqs->data[j])) == 0)
 	  fprintf(stderr,"Read error res\n");
       for (j = 0; j < pulsars[i].N; j++)
 	if (fscanf(infile,"%d\n",&(pulsars[i].backends[j])) == 0)
@@ -291,36 +291,33 @@ void initialize_pulsars(struct mypulsar * pulsars, char ** filenames, int Nplsr,
 	  printf("\n");
 	}
 
+      double tmin= 1.0E10;
+      double tmax = 0.0;
+      //  double temp;
+      int b;
+      for (b = 0; b < pulsars[i].N; b++)
+	{
+	  if ((pulsars[i].toa->data[b]) > tmax)
+	    tmax = pulsars[i].toa->data[b];
+	  if ((pulsars[i].toa->data[b]) < tmin)
+	    tmin = pulsars[i].toa->data[b];
+	}
+      temp = (tmax - tmin);
+      //temp = *tspan*1.306;                                                                                                                                                 
+      //  temp = *tspan;
+      //temp = *tspan*1.18;                                                                                                                                                  
+      double ffund = 1.0/temp;
+      //set up frequency grid                                                                                                                                                
+      for (b = 0; b < (NFFT/2); b++)
+	{
+	  pulsars[i].freqs[b] = ffund*(b+1);
+	  //      printf("%d\t%e\n",i,par->freqs[i]);
+	}
+      pulsars[i].tspan = temp;
+      
       //      compute_Nwiggle(&(pulsars[i]));
 
     }
-
-  double tmin= 1.0E10;
-  double tmax = 0.0;
-  //  double temp;
-  int a,b;
-  for (a = 0; a < Nplsr; a++)
-    {
-      for (b = 0; b < pulsars[a].N; b++)
-        {
-          if ((pulsars[a].toa->data[b]) > tmax)
-            tmax = pulsars[a].toa->data[b];
-          if ((pulsars[a].toa->data[b]) < tmin)
-            tmin = pulsars[a].toa->data[b];
-        }
-    }
-  temp = (tmax - tmin);
-  //temp = *tspan*1.306;                                                                                                                                                 
-  //  temp = *tspan;
-  //temp = *tspan*1.18;                                                                                                                                                  
-  double ffund = 1.0/temp;
-  //set up frequency grid                                                                                                                                                
-  for (i = 0; i < (NFFT/2); i++)
-    {
-      par->freqs[i] = ffund*(i+1);
-      //      printf("%d\t%e\n",i,par->freqs[i]);
-    }
-  par->tspan = temp;
 
 
   if (verbose)
@@ -402,7 +399,7 @@ void initialize_pulsars_fromtempo(pulsar * tempo_psrs, struct mypulsar * pulsars
 	  //      pulsars[i].N_m = 
 	  //if (fscanf(infile,"%d %d %d %d\n",&(pulsars[i].N),&(pulsars[i].N_m),&(pulsars[i].n_be),&(pulsars[i].n_sample)) != 0);
 	      pulsars[i].res = my_vector_alloc(pulsars[i].N);
-	      pulsars[i].freqs = my_vector_alloc(pulsars[i].N);
+	      pulsars[i].obsfreqs = my_vector_alloc(pulsars[i].N);
 	      pulsars[i].backends = (int *) malloc(pulsars[i].N*sizeof(int));
 	    }
       //Do this part always
@@ -411,7 +408,7 @@ void initialize_pulsars_fromtempo(pulsar * tempo_psrs, struct mypulsar * pulsars
 	  pulsars[i].res->data[j] = psr.obsn[j].residual;
 	  if (only_res == 0)
 	    {
-	      pulsars[i].freqs->data[j] = psr.obsn[j].freq;
+	      pulsars[i].obsfreqs->data[j] = psr.obsn[j].freq;
 	      l = 0;
 	      //	  if (verbose)
 	      //	    printf("Found %d flags\n",psr.obsn[j].nFlags);
@@ -504,6 +501,7 @@ void initialize_pulsars_fromtempo(pulsar * tempo_psrs, struct mypulsar * pulsars
 	      if (dobreak)
 		break;
 	    }
+	  pulsars[i].n_sample = j;
 	  if (verbose == 2)
 	    {
 	      printf("first sample line:\n");
@@ -513,39 +511,33 @@ void initialize_pulsars_fromtempo(pulsar * tempo_psrs, struct mypulsar * pulsars
 	    }
 #endif
 	  //      compute_Nwiggle(&(pulsars[i]));
-	}
-    }
-
-  if (only_res == 0)
-    {
-      double tmin= 1.0E10;
-      double tmax = 0.0;
+	  double tmin= 1.0E10;
+	  double tmax = 0.0;
       //  double temp;
-      int a,b;
-      for (a = 0; a < Nplsr; a++)
-	{
-	  for (b = 0; b < pulsars[a].N; b++)
+	  int b;
+	  for (b = 0; b < pulsars[i].N; b++)
 	    {
-	      if ((pulsars[a].toa->data[b]) > tmax)
-		tmax = pulsars[a].toa->data[b];
-	      if ((pulsars[a].toa->data[b]) < tmin)
-		tmin = pulsars[a].toa->data[b];
+	      if ((pulsars[i].toa->data[b]) > tmax)
+		tmax = pulsars[i].toa->data[b];
+	      if ((pulsars[i].toa->data[b]) < tmin)
+		tmin = pulsars[i].toa->data[b];
 	    }
+	  temp = (tmax - tmin);
+	  //temp = *tspan*1.306;                                                                                                                                                 
+	  //  temp = *tspan;
+	  //temp = *tspan*1.18;                                                                                                                                                  
+	  double ffund = 1.0/temp;
+	  //set up frequency grid                                                                                                                                                
+	  for (b = 0; b < (NFFT/2); b++)
+	    {
+	      pulsars[i].freqs[b] = ffund*(b+1);
+	      //      printf("%d\t%e\n",i,par->freqs[i]);
+	    }
+	  pulsars[i].tspan = temp;
+      
 	}
-      temp = (tmax - tmin);
-  //temp = *tspan*1.306;                                                                                                                                                 
-  //  temp = *tspan;
-  //temp = *tspan*1.18;                                                                                                                                                  
-      double ffund = 1.0/temp;
-      printf("ffund\t%g\n",ffund);
-      //set up frequency grid                                                                                                                                                
-      for (i = 0; i < (NFFT/2); i++)
-	{
-	  par->freqs[i] = ffund*(i+1);
-	  //      printf("%d\t%e\n",i,par->freqs[i]);
-	}
-      par->tspan = temp;
-    }//endif only_res == 0
+
+    }
 
   if (verbose)
     printf("Ndim is %d\n",*Ndim);
@@ -562,14 +554,14 @@ void initialize_fft_per_pulsar(struct mypulsar * psr, struct parameters * par)
 	{
 	  //	      f = pow(10.0,(logfmax - logfmin) * (float) i / (float) (NFFT/2.0) + logfmin);
 	  //	  if (verbose > 2)
-	  f = par->freqs[i];
+	  f = psr->freqs[i];
 	  int row = i*2;
 	  int row_cos = i*2+1;
 	  psr->F->data[(row)*psr->F->m + b] = sin(2.0*PI*psr->toa->data[b]*f);///par->tspan;
 	  psr->F->data[(row_cos)*psr->F->m + b] = cos(2.0*PI*psr->toa->data[b]*f);///par->tspan;
 #ifdef DM
-	  psr->F->data[(row+NFFT)*psr->F->m + b] = 1.0/(K_DM*psr->freqs->data[b]*psr->freqs->data[b])*sin(2.0*PI*psr->toa->data[b]*f);///par->tspan;
-	  psr->F->data[(row_cos+NFFT)*psr->F->m +  b] = 1.0/(K_DM*psr->freqs->data[b]*psr->freqs->data[b])*cos(2.0*PI*psr->toa->data[b]*f);///par->tspan;
+	  psr->F->data[(row+NFFT)*psr->F->m + b] = 1.0/(K_DM*psr->obsfreqs->data[b]*psr->obsfreqs->data[b])*sin(2.0*PI*psr->toa->data[b]*f);///par->tspan;
+	  psr->F->data[(row_cos+NFFT)*psr->F->m +  b] = 1.0/(K_DM*psr->obsfreqs->data[b]*psr->obsfreqs->data[b])*cos(2.0*PI*psr->toa->data[b]*f);///par->tspan;
 #endif	  
 	}
     }
@@ -596,14 +588,14 @@ void calculate_phi_inv_per_pulsar(struct mypulsar * psr,struct parameters par)
 #endif
   for (i = 0; i < NFFT/2; i++)
     {
-      f = par.freqs[i];
+      f = psr->freqs[i];
       //      power = rfac* pow(f/3.17e-08,-rgamma) / par.tspan;
       //add red noise for diagonal elements
-      power = rfac * pow(f/3.17e-08,-rgamma)/par.tspan;
+      power = rfac * pow(f/3.17e-08,-rgamma)/psr->tspan;
       psr->phi_inv->data[(2*i)*psr->phi_inv->m  + 2*i] = 1.0/power;
       psr->phi_inv->data[(2*i+1)*psr->phi_inv->m + 2*i + 1] = 1.0/power;
 #ifdef DM
-      power = dmfac * pow(f/3.17e-08,-dmgamma)/par.tspan;
+      power = dmfac * pow(f/3.17e-08,-dmgamma)/psr->tspan;
       psr->phi_inv->data[(NFFT+2*i)*psr->phi_inv->m  + NFFT + 2*i] = 1.0/power;
       psr->phi_inv->data[(NFFT+2*i+1)*psr->phi_inv->m + NFFT + 2*i + 1] = 1.0/power;
 #endif
@@ -871,9 +863,20 @@ struct Fp compute_Fp(struct mypulsar * pulsars, struct parameters * par, int Npl
   coeff.tCt = 0.0;
   coeff.tHt = 0.0;
   int i;
+  int used = 0;
   //build matrices
   for (i = 0; i < Nplsr; i++)
     {
+      //use only pulsars with appropriate observation span
+      if ((2.0*1.0/pulsars[i].tspan) > (par->omega/(2.0*PI)))
+	{
+	  if (verbose)
+	    {
+	      printf("Skipping %s\t for freq %e, 1/tspan is \t%e\n",pulsars[i].name,par->omega/(2.0*PI),1.0/pulsars[i].tspan);
+	    }
+	  continue;
+	}
+      used++;
       //get inner product
       struct my_vector *Ct;
       Ct = my_vector_alloc(pulsars[i].N_m);
@@ -926,6 +929,7 @@ struct Fp compute_Fp(struct mypulsar * pulsars, struct parameters * par, int Npl
       my_matrix_free(HCH_lu);
       my_vector_free(Ct);
     }
+  coeff.used = used;
   return coeff;
 }
 
@@ -1145,7 +1149,7 @@ s = culaInitialize();
       pulsars[i].rA = pow(10.0,-14.35);
       pulsars[i].rgamma = 1.52;
 #endif
-      pulsars[i].index = 100;
+      pulsars[i].index = pulsars[i].n_sample-2;
       compute_C_matrix(&(pulsars[i]),&params);
     }
 
@@ -1158,7 +1162,11 @@ s = culaInitialize();
 
   Fp = compute_Fp(pulsars,&params,Nplsr);
   printf("#\t% 6.4e% 6.4e\n",Fp.tCt,Fp.tHt);
-
+  //find longest tspan for min freq
+  params.tspan = 0.0;
+  for (i = 0; i < Nplsr; i++)
+    if (pulsars[i].tspan > params.tspan)
+      params.tspan = pulsars[i].tspan;
   //create array of frequencies to be investigated
   double fstep = 0.01;
   double fmin = log10(1.0/params.tspan);
@@ -1228,49 +1236,52 @@ s = culaInitialize();
     {
       params.omega = h_freqs[rank*n_per_proc + ifreq] *2.0*PI;
 #endif
-//      sprintf(oname,"%6.4e.fp",params.omega/(2.0*PI));
-//      outfile = fopen(oname,"w");
-//      //      pulsars[0].index = 23;
-//      for (i = 0; i < 3000; i++)
-//	{
-//	  //fill up psrs with noise
-//	  //      for (j = 0; j < Nplsr; j++)
-//	  double tstart = omp_get_wtime();
-//
-//	  for (j = 0; j < Nplsr; j++)
-//	    {
-//	      pulsars[j].index += 2;
-//	      compute_C_matrix(&(pulsars[j]),&params);
-//	    }
-//
-//	  double tend = omp_get_wtime();
-//	  if (verbose == 3)
-//	    printf("compute_C_matrix\t%g\n",tend-tstart);
-//	  //	  compute_Nwiggle(&(pulsars[0]));
-//	  tstart = omp_get_wtime();
-//
-//    //    psr->Gres->data[i] = gsl_ran_gaussian(r,1.0);
-//	  
-//	  for (j = 0; j < Nplsr; j++)
-//	    create_noise_only(&(pulsars[j]),r);
-//	  tend = omp_get_wtime();
-//	  if (verbose == 3)
-//	    printf("create_noise \t%g\n",tend-tstart);
-//	  tstart = omp_get_wtime();
-//	  Fp = compute_Fp(pulsars,&params,Nplsr);
-//	  tend = omp_get_wtime();
-//	  if (verbose == 3)
-//	    printf("compute_Fp \t%g\n",tend-tstart);
-//	  fprintf(outfile,"% 6.4e\t% 6.4e\n",Fp.tCt,Fp.tHt);
-//	  //printf("% 6.4e\n",Fp.tHt);
-//	}
-////      double tend_tot = omp_get_wtime();
-////      if (verbose == 3)
-////	printf("Duration all evaluation:\t%g\n",tend_tot-tstart_tot);
-//      fclose(outfile);
+#ifdef F0
+      sprintf(oname,"%6.4e.fp",params.omega/(2.0*PI));
+      outfile = fopen(oname,"w");
+      //      pulsars[0].index = 23;
+      for (i = 0; i < 1000; i++)
+	{
+	  //fill up psrs with noise
+	  //      for (j = 0; j < Nplsr; j++)
+	  double tstart = omp_get_wtime();
+
+	  for (j = 0; j < Nplsr; j++)
+	    {
+	      pulsars[j].index += 2;
+	      compute_C_matrix(&(pulsars[j]),&params);
+	    }
+
+	  double tend = omp_get_wtime();
+	  if (verbose == 3)
+	    printf("compute_C_matrix\t%g\n",tend-tstart);
+	  //	  compute_Nwiggle(&(pulsars[0]));
+	  tstart = omp_get_wtime();
+
+    //    psr->Gres->data[i] = gsl_ran_gaussian(r,1.0);
+	  
+	  for (j = 0; j < Nplsr; j++)
+	    create_noise_only(&(pulsars[j]),r);
+	  tend = omp_get_wtime();
+	  if (verbose == 3)
+	    printf("create_noise \t%g\n",tend-tstart);
+	  tstart = omp_get_wtime();
+	  Fp = compute_Fp(pulsars,&params,Nplsr);
+	  tend = omp_get_wtime();
+	  if (verbose == 3)
+	    printf("compute_Fp \t%g\n",tend-tstart);
+	  fprintf(outfile,"% 6.4e\t% 6.4e\t%d\n",Fp.tCt,Fp.tHt,Fp.used);
+	  //printf("% 6.4e\n",Fp.tHt);
+	}
+//      double tend_tot = omp_get_wtime();
+//      if (verbose == 3)
+//	printf("Duration all evaluation:\t%g\n",tend_tot-tstart_tot);
+      fclose(outfile);
+#else
       Fp = compute_Fp(pulsars,&params,Nplsr);
       changed = 0;
-      fprintf(ofile,"% 6.4e % 6.4e% 6.4e\n",params.omega,Fp.tCt,Fp.tHt);
+      fprintf(ofile,"% 6.4e  % 6.4e  % 6.4e %d\n",params.omega,Fp.tCt,Fp.tHt,Fp.used);
+#endif
     }
   double tend_tot = omp_get_wtime();
   fprintf(stderr,"Duration all evaluation:\t%g\n",tend_tot-tstart_tot);

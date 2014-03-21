@@ -26,6 +26,7 @@ struct source
 struct Fp
 {
   double tCt,tHt;
+  int used;
 };
 
 struct particle
@@ -51,22 +52,22 @@ struct my_matrix
 struct mypulsar
 {
   char name[50];
-  double raj,dec;
+  double raj,dec,tspan;
   int N,N_m,index;
   int n_be,n_sample;
   int * backends; //points to the first toa index for each backend
   //  double 
+  double freqs[NFFT/2];
   double *sigma,*oldbat;
   double rA,rgamma;
   double dmA,dmgamma;
   struct my_matrix *G,*CWN,*GNGinv,*phi_inv,*F,*H,*C,*Cinv,*L;
   struct my_matrix *GF,*GH,*sample;
-  struct my_vector *toa,*res,*Gres,*freqs;
+  struct my_vector *toa,*res,*Gres,*obsfreqs;
 };
 
 struct parameters
 {
-  double freqs[NFFT/2];
   double tspan;
   double omega;
   double values[NCOEFF];
