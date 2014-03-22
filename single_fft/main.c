@@ -22,7 +22,7 @@
 #define MAX_PSR 45
 #define MAX_BE 20
 
-#define ANGLES
+//#define ANGLES
 
 #include <mydefs.h>
 
@@ -49,7 +49,7 @@
 
 //#define SINGLE
 //#define RUNITY
-//#define SS
+#define SS
 //#define REDNOISE
 #define POWERLAW
 //#define SWITCHEROO
@@ -473,17 +473,18 @@ void initialize_fft_per_pulsar(struct mypulsar * psr, struct parameters * par)
 	  //	      f = pow(10.0,(logfmax - logfmin) * (float) i / (float) (NFFT/2.0) + logfmin);
 	  //	  if (verbose > 2)
 	  f = psr->freqs[i];
+	  //	  printf("FREQ %s\t%d  %g\n",psr->name,i,f);
 	  int row = i*2;
 	  int row_cos = i*2+1;
 	  psr->F->data[(row)*psr->F->m + b] = sin(2.0*PI*psr->toa->data[b]*f);///par->tspan;
 	  psr->F->data[(row_cos)*psr->F->m + b] = cos(2.0*PI*psr->toa->data[b]*f);///par->tspan;
+	  //	  printf("%g\n",psr->F->data[(row)*psr->F->m + b]*psr->F->data[(row)*psr->F->m + b]+psr->F->data[(row_cos)*psr->F->m + b]*psr->F->data[(row_cos)*psr->F->m + b]);
 #ifdef DM
 	  psr->F->data[(row+NFFT)*psr->F->m + b] = 1.0/(K_DM*psr->obsfreqs->data[b]*psr->obsfreqs->data[b])*sin(2.0*PI*psr->toa->data[b]*f);///par->tspan;
 	  psr->F->data[(row_cos+NFFT)*psr->F->m +  b] = 1.0/(K_DM*psr->obsfreqs->data[b]*psr->obsfreqs->data[b])*cos(2.0*PI*psr->toa->data[b]*f);///par->tspan;
 #endif	  
 	}
     }
-  //  my_matrix_print("F\0",psr->F);
   my_dgemm(CblasTrans,CblasNoTrans,1.0,psr->G,psr->F,0.0,psr->GF);
 }
 
@@ -781,7 +782,7 @@ void calculate_phi(struct my_matrix * a_ab, struct my_matrix * phi,struct parame
             {
 #ifdef POWERLAW
               //f = (float) (i+1) * ffund;                                                                                                                               
-              f = pulsars[a].freqs[i];
+              f = pulsars[a].freqs[i]; // or b because they have to be the same
               power =  a_ab->data[b*a_ab->m + a]*fac* pow(f/3.17e-08,-params.values[1])/params.tspan;
 #else
               power =  a_ab->data[b*a_ab->m + a]*pow(10.0,params.values[i]);
@@ -940,7 +941,7 @@ double compute_likelihood(struct my_matrix * phi,struct mypulsar * pulsars, int 
     {
       for (i = 0; i < NFFT; i++)
 	for (j = 0; j < NFFT; j++)
-	  sigmainv->data[(i + ind_c)*sigmainv->m + ind_c + j] = pulsars[a].FNF->data[i*pulsars[a].FNF->m + j];
+	  sigmainv->data[(i + ind_c)*sigmainv->m + ind_c + j] += pulsars[a].FNF->data[i*pulsars[a].FNF->m + j];
       ind_c += NFFT;
     }
 
@@ -1099,25 +1100,26 @@ void maximize_likelihood(struct my_matrix *a_ab, struct my_matrix *phi,double de
 {
   double likeli_old;
 
-  params->values[0] = -14.0;
+  params->values[0] = -13.3;
   params->values[1] = 4.333;
   int offset = 2;
-
+#ifdef SS
   params->values[offset+0] = 1.0;
   params->values[offset+1] = 1.5;
-  params->values[offset+2] = -8.0;
+  params->values[offset+2] = -8.5;
   params->values[offset+3] = 1.0;
   params->values[offset+4] = 0.8;
   params->values[offset+5] = 2.5;
-
+#endif
   calculate_phi(a_ab,phi,*params,Nplsr,pulsars);
   likeli_old = compute_likelihood(phi,pulsars,Nplsr);
-  printf("#VALUE AT %f\t%f\t%f\n",params->values[6],params->values[7],likeli_old);
+  //  printf("#VALUE AT %f\t%f\t%f\n",params->values[6],params->values[7],likeli_old);
   double minimum = 1e10;
   //for (params->values[offset+2] = params->l[offset+2]; params->values[offset+2] < params->u[offset+2]; params->values[offset+2] += (params->u[offset+2]-params->l[offset+2])/150.0)
-  offset = 0;
-  for (params->values[offset+0] = params->l[offset+0]; params->values[offset+0] < params->u[offset+0]; params->values[offset+0] += (params->u[offset+0]-params->l[offset+0])/50.0)
-    //  for (params->values[offset+1] = params->l[offset+1]; params->values[offset+1] < params->u[offset+1]; params->values[offset+1] += (params->u[offset+1]-params->l[offset+1])/50.0)
+  //printf("%f\t%f\t%f\n",params->values[offset+0],params->l[offset+0],params->u[offset+0]);
+  for (params->values[offset+2] = params->l[offset+2]; params->values[offset+2] < params->u[offset+2]; params->values[offset+2] += (params->u[offset+2]-params->l[offset+2])/10.0)
+    for (params->values[offset+0] = params->l[offset+0]; params->values[offset+0] < params->u[offset+0]; params->values[offset+0] += (params->u[offset+0]-params->l[offset+0])/10.0)
+      for (params->values[offset+1] = params->l[offset+1]; params->values[offset+1] < params->u[offset+1]; params->values[offset+1] += (params->u[offset+1]-params->l[offset+1])/10.0)
      //for (params->values[offset-2+6] = params->l[offset-2+6]; params->values[offset-2+6] < params->u[offset-2+6]; params->values[offset-2+6] += (params->u[offset-2+6]-params->l[offset-2+6])/20.0)                                                                                                                                            
      //for (params->values[offset-2+7] = params->l[offset-2+7]; params->values[offset-2+7] < params->u[offset-2+7]; params->values[offset-2+7] += (params->u[offset-2+7]-params->l[offset-2+7])/20.0)                                                                                                                                            
       {
@@ -1129,9 +1131,9 @@ void maximize_likelihood(struct my_matrix *a_ab, struct my_matrix *phi,double de
             minimum = likeli_old;
             printf("#NEW MIN\n");
           }
-        //printf("%f\t%f\t%f\t%f\n",params->values[offset-2+5],params->values[offset-2+6],params->values[offset-2+3],likeli_old);                                        
+        printf("%f\t%f\t%f\t%f\n",params->values[offset+2],params->values[offset+0],params->values[offset+1],likeli_old);                                        
 	//printf("%f\t%f\t%f\n",params->values[offset+0],params->values[offset+1],likeli_old);
-        printf("%f\t%f\n",params->values[offset+0],likeli_old);                                                                                                        
+        //printf("%f\t%f\n",params->values[offset+2],likeli_old);                                                                                                        
         fflush(stdout);
       }
 
@@ -1278,7 +1280,7 @@ s = culaInitialize();
     {
       //      filenames[i] = (char *) malloc(60*sizeof(char));
       strcpy(pulsarname[i],argv[i+3]);
-      sprintf(filenames[i],"%s.tim",pulsarname[i]);
+      sprintf(filenames[i],"%s_sim.tim",pulsarname[i]);
       sprintf(parfilenames[i],"%s.par",pulsarname[i]);
       if (verbose)
 	printf("Read %s\t%s\n",filenames[i],parfilenames[i]);
@@ -1319,7 +1321,7 @@ s = culaInitialize();
 
   for (i = 0; i < Nplsr; i++)
     {
-      //      pulsars[i].freqs[NFFT/2-1] = params.omega/(2.0*PI);//the freq to be investigated
+      pulsars[i].freqs[NFFT/2-1] = params.omega/(2.0*PI);//the freq to be investigated
       pulsars[i].index = pulsars[i].n_sample-2;
       //here I compute FNF per pulsar
       compute_C_matrix(&(pulsars[i]),&params); //computes FNF and FNT
@@ -1348,28 +1350,32 @@ s = culaInitialize();
   double detGNG = 0.0;
 
   int offset = 2;
-  params.l[offset+0] = 0.0;//source theta                                                                                                                                
   params.u[0] = -12.0;
   params.l[0] = -15.0;
   params.u[1] = 5.0;
   params.l[1] = 3.5;
-
+#ifdef SS
+  params.l[offset+0] = 0.0;//source theta                                                                                                                                
   params.u[offset+0] = PI;
   params.l[offset+1] = 0.0;//source phi                                                                                                                                  
   params.u[offset+1] = 2.0*PI;//2.0*PI-0.02;                                                                                                                             
-  params.l[offset+2] = -20.0;//log of amplitude                                                                                                                          
-  params.u[offset+2] = -5.0;
-
+//  params.l[offset+0] = 0.7;//source theta                                                                                                                                
+//  params.u[offset+0] = 1.3;
+//  params.l[offset+1] = 1.0;//source phi                                                                                                                                  
+//  params.u[offset+1] = 2.0;//2.0*PI-0.02;                                                                                                                             
+  params.l[offset+2] = -5.0;//log of amplitude                                                                                                                          
+  params.u[offset+2] = -3.0;
+#endif
   
   struct source source_pars;
-  source_pars.Amp = pow(10.0,-8.0);
+  source_pars.Amp = pow(10.0,-1.0);
   source_pars.theta_s = 1.0;
   source_pars.phi_s = 1.5;
-  source_pars.Mc = 1e8;
+  source_pars.Mc = 1e9;
   source_pars.psi = 1.0;
   source_pars.phi0 = 2.5;
   source_pars.iota = 0.8;
-  source_pars.fr = 2.e-08;
+  source_pars.fr = 1.5e-08;
 
 //  for (i = 0; i < Nplsr; i++)
 //    add_signal(&(pulsars[i]),&(tempo_psrs[i]),params,source_pars);
