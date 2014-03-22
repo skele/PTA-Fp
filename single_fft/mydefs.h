@@ -670,7 +670,7 @@ int get_inverse_lu(struct my_matrix *m, struct my_matrix *lu, int dim, double *d
       ;
     }
   memcpy(lu->data,m->data,m->m*m->n*sizeof(double));
-
+#endif
   //compute determinant
   double d = 0.0;
   double sign = 1.0;
@@ -683,6 +683,7 @@ int get_inverse_lu(struct my_matrix *m, struct my_matrix *lu, int dim, double *d
 //	d -= log(lu->data[i*lu->m + i]);
     }
   *det = sign*d;
+#ifdef CULA
   s = culaDgetri(N,m->data,lda,ipiv);
   if(s != culaNoError)
     {

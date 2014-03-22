@@ -16,8 +16,8 @@
 #include <mpi.h>
 #endif
 
-#define verbose 2
-#define NFFT 24
+#define verbose 0
+#define NFFT 16
 #define N_SAMPLE_MAX 27000
 #define MAX_PSR 45
 #define MAX_BE 20
@@ -49,7 +49,7 @@
 
 //#define SINGLE
 //#define RUNITY
-#define SS
+//#define SS
 //#define REDNOISE
 #define POWERLAW
 //#define SWITCHEROO
@@ -926,7 +926,7 @@ double compute_likelihood(struct my_matrix * phi,struct mypulsar * pulsars, int 
   double  detPhi = 0.0;
   double detSigma = 0.0;
 
-  my_matrix_print("phi\0",phi);
+  //  my_matrix_print("phi\0",phi);
 
 //  if (get_inverse_cholesky(phiinv,cholesky_phi,NFFT*Nplsr) == 0 && (verbose))                                                                                          
 //    printf("My inversion of phi work\n");                                                                                                                              
@@ -943,7 +943,6 @@ double compute_likelihood(struct my_matrix * phi,struct mypulsar * pulsars, int 
 	  sigmainv->data[(i + ind_c)*sigmainv->m + ind_c + j] = pulsars[a].FNF->data[i*pulsars[a].FNF->m + j];
       ind_c += NFFT;
     }
-  //  my_matrix_print("phi\0",sigmainv);
 
   //invert Sigma
   if (get_inverse_lu(sigmainv,cholesky_sigma,NFFT*Nplsr,&detSigma) == 0 && (verbose))
@@ -957,14 +956,14 @@ double compute_likelihood(struct my_matrix * phi,struct mypulsar * pulsars, int 
       FNTbig->data[a*NFFT + i] = pulsars[a].FNT->data[i];
   double dsd;
   //combine FNT into FNTbig vector
-  my_dsymv(1.0,sigmainv,FNTbig,0.0,dsigma); 
+  my_dgemv(CblasNoTrans,1.0,sigmainv,FNTbig,0.0,dsigma); 
   my_vector_mult(FNTbig,dsigma,&dsd);
   //add together tNt per pulsar
   double detN = 0.0;
   for (i = 0; i < Nplsr; i++)
     {
-      //tNt += pulsars[i].tNt;
-      //    detN += pulsars[i].det;
+      tNt += pulsars[i].tNt;
+      detN += pulsars[i].det;
     }
 
   likeli = tNt-dsd;
@@ -1104,25 +1103,6 @@ void maximize_likelihood(struct my_matrix *a_ab, struct my_matrix *phi,double de
   params->values[1] = 4.333;
   int offset = 2;
 
-#ifndef SS
-  for (params->values[2] = params->l[2]; params->values[2] < params->u[2]; params->values[2] += (params->u[2]-params->l[2])/20.0)
-    for (params->values[3] = params->l[3]; params->values[3] < params->u[3]; params->values[3] += (params->u[3]-params->l[3])/20.0)
-      {
-        calculate_phi(a_ab,phi,*params,Nplsr,tspan,pulsars);
-
-        likeli_old = compute_likelihood(phi,pulsars,Nplsr);
-        //printf("%f\t%f\t%f\n",params->values[0],params->values[1],likeli_old);                                                                                         
-	printf("%f\t%f\t%f\n",params->values[2],params->values[3],likeli_old);
-	fflush(stdout);
-      }
-#else
-#ifdef REDNOISE
-  offset = 4;
-  params->values[2] = -14.0;
-  params->values[3] = 2.0;
-#endif
-
-  //#else                                                                                                                                                                
   params->values[offset+0] = 1.0;
   params->values[offset+1] = 1.5;
   params->values[offset+2] = -8.0;
@@ -1134,9 +1114,10 @@ void maximize_likelihood(struct my_matrix *a_ab, struct my_matrix *phi,double de
   likeli_old = compute_likelihood(phi,pulsars,Nplsr);
   printf("#VALUE AT %f\t%f\t%f\n",params->values[6],params->values[7],likeli_old);
   double minimum = 1e10;
-  for (params->values[offset+2] = params->l[offset+2]; params->values[offset+2] < params->u[offset+2]; params->values[offset+2] += (params->u[offset+2]-params->l[offset+2])/150.0)
-    //for (params->values[offset+0] = params->l[offset+0]; params->values[offset+0] < params->u[offset+0]; params->values[offset+0] += (params->u[offset+0]-params->l[offset+0])/30.0)
-    //for (params->values[offset+1] = params->l[offset+1]; params->values[offset+1] < params->u[offset+1]; params->values[offset+1] += (params->u[offset+1]-params->l[offset+1])/30.0)
+  //for (params->values[offset+2] = params->l[offset+2]; params->values[offset+2] < params->u[offset+2]; params->values[offset+2] += (params->u[offset+2]-params->l[offset+2])/150.0)
+  offset = 0;
+  for (params->values[offset+0] = params->l[offset+0]; params->values[offset+0] < params->u[offset+0]; params->values[offset+0] += (params->u[offset+0]-params->l[offset+0])/50.0)
+    //  for (params->values[offset+1] = params->l[offset+1]; params->values[offset+1] < params->u[offset+1]; params->values[offset+1] += (params->u[offset+1]-params->l[offset+1])/50.0)
      //for (params->values[offset-2+6] = params->l[offset-2+6]; params->values[offset-2+6] < params->u[offset-2+6]; params->values[offset-2+6] += (params->u[offset-2+6]-params->l[offset-2+6])/20.0)                                                                                                                                            
      //for (params->values[offset-2+7] = params->l[offset-2+7]; params->values[offset-2+7] < params->u[offset-2+7]; params->values[offset-2+7] += (params->u[offset-2+7]-params->l[offset-2+7])/20.0)                                                                                                                                            
       {
@@ -1150,11 +1131,9 @@ void maximize_likelihood(struct my_matrix *a_ab, struct my_matrix *phi,double de
           }
         //printf("%f\t%f\t%f\t%f\n",params->values[offset-2+5],params->values[offset-2+6],params->values[offset-2+3],likeli_old);                                        
 	//printf("%f\t%f\t%f\n",params->values[offset+0],params->values[offset+1],likeli_old);
-        printf("%f\t%f\n",params->values[offset+2],likeli_old);                                                                                                        
+        printf("%f\t%f\n",params->values[offset+0],likeli_old);                                                                                                        
         fflush(stdout);
       }
-
-#endif
 
 
 }
@@ -1340,7 +1319,7 @@ s = culaInitialize();
 
   for (i = 0; i < Nplsr; i++)
     {
-      pulsars[i].freqs[NFFT/2-1] = params.omega/(2.0*PI);//the freq to be investigated
+      //      pulsars[i].freqs[NFFT/2-1] = params.omega/(2.0*PI);//the freq to be investigated
       pulsars[i].index = pulsars[i].n_sample-2;
       //here I compute FNF per pulsar
       compute_C_matrix(&(pulsars[i]),&params); //computes FNF and FNT
@@ -1370,6 +1349,11 @@ s = culaInitialize();
 
   int offset = 2;
   params.l[offset+0] = 0.0;//source theta                                                                                                                                
+  params.u[0] = -12.0;
+  params.l[0] = -15.0;
+  params.u[1] = 5.0;
+  params.l[1] = 3.5;
+
   params.u[offset+0] = PI;
   params.l[offset+1] = 0.0;//source phi                                                                                                                                  
   params.u[offset+1] = 2.0*PI;//2.0*PI-0.02;                                                                                                                             
@@ -1378,23 +1362,23 @@ s = culaInitialize();
 
   
   struct source source_pars;
-  source_pars.Amp = pow(10.0,-30.0);
+  source_pars.Amp = pow(10.0,-8.0);
   source_pars.theta_s = 1.0;
   source_pars.phi_s = 1.5;
-  source_pars.Mc = 1e9;
+  source_pars.Mc = 1e8;
   source_pars.psi = 1.0;
   source_pars.phi0 = 2.5;
   source_pars.iota = 0.8;
   source_pars.fr = 2.e-08;
 
-  for (i = 0; i < Nplsr; i++)
-    add_signal(&(pulsars[i]),&(tempo_psrs[i]),params,source_pars);
-
-  formBatsAll(tempo_psrs,Nplsr);
-  formResiduals(tempo_psrs,Nplsr,0.0);
-  doFitAll(tempo_psrs,Nplsr,0);
-
-  initialize_pulsars_fromtempo(tempo_psrs,pulsars,Nplsr,&Ndim,&Ntot,&params,1);
+//  for (i = 0; i < Nplsr; i++)
+//    add_signal(&(pulsars[i]),&(tempo_psrs[i]),params,source_pars);
+//
+//  formBatsAll(tempo_psrs,Nplsr);
+//  formResiduals(tempo_psrs,Nplsr,0.0);
+//  doFitAll(tempo_psrs,Nplsr,0);
+//
+//  initialize_pulsars_fromtempo(tempo_psrs,pulsars,Nplsr,&Ndim,&Ntot,&params,1);
 
   maximize_likelihood(a_ab,phi,detGNG,Nplsr,&params,pulsars);
 

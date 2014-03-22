@@ -16,7 +16,7 @@
 #include <mpi.h>
 #endif
 
-#define verbose 0
+#define verbose 2
 #define NFFT 100
 #define N_SAMPLE_MAX 27000
 #define MAX_PSR 45
