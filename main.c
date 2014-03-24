@@ -16,8 +16,8 @@
 #include <mpi.h>
 #endif
 
-#define verbose 2
-#define NFFT 100
+#define verbose 0
+#define NFFT 30
 #define N_SAMPLE_MAX 27000
 #define MAX_PSR 45
 #define MAX_BE 20
@@ -306,7 +306,7 @@ void initialize_pulsars(struct mypulsar * pulsars, char ** filenames, int Nplsr,
       //temp = *tspan*1.306;                                                                                                                                                 
       //  temp = *tspan;
       //temp = *tspan*1.18;                                                                                                                                                  
-      double ffund = 1.0/(2.0*temp);
+      double ffund = 1.0/(temp);
       //set up frequency grid                                                                                                                                                
       for (b = 0; b < (NFFT/2); b++)
 	{
@@ -434,9 +434,31 @@ void initialize_pulsars_fromtempo(pulsar * tempo_psrs, struct mypulsar * pulsars
 	      //	  pulsars[i].backends[j] = psr.obsn[j].residual;
 	    }
 	}
-      //compute design matrix here
+      //compute design matrix here and sort backends
       if (only_res == 0)
 	{
+	  int *sorted;
+	  sorted = (int *) malloc(pulsars[i].n_be * sizeof(int));
+	  argsort(backends,sorted,pulsars[i].n_be);
+	  if (verbose)
+	    for (j = 0; j < pulsars[i].n_be; j++)
+	      {
+		printf("Unsorted:\t%s\tsorted: %s\n",backends[j],backends[sorted[j]]);
+	      }
+	  //transform the backendids so they match alphabetical order
+	  for (j = 0; j < pulsars[i].N; j++)
+	    {
+	      int new = 0;
+	      while (sorted[new] != pulsars[i].backends[j])
+		new++;
+	      if (verbose)
+		printf("%d\t%d\n",new,pulsars[i].backends[j]);
+	      pulsars[i].backends[j] = new;
+	    }
+	  
+
+	  free(sorted);
+
 	  int ma = psr.nParam;
 
 	  pulsars[i].N_m = pulsars[i].N - ma;
@@ -1149,7 +1171,8 @@ s = culaInitialize();
       pulsars[i].rA = pow(10.0,-14.35);
       pulsars[i].rgamma = 1.52;
 #endif
-      pulsars[i].index = pulsars[i].n_sample-2;
+      //      pulsars[i].index = pulsars[i].n_sample-2;
+      pulsars[i].index = 0;
       compute_C_matrix(&(pulsars[i]),&params);
     }
 

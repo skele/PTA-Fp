@@ -19,6 +19,6 @@ all: main.c
 cula: main.c
 	$(CC) $(CFLAGS) -o pca_search $^ $(INCCULA) -lblas -DCULA
 mpi: main.c
-	mpicc $(CFLAGS) -o pca $^ $(INC) -DMPI
+	mpicc $(CFLAGS) -o pca_search $^ $(INC) -DMPI
 culampi: main.c
 	mpicc $(CFLAGS) -o pca_cula_mpi $^ $(INCCULA) -DMPI -lblas -DCULA

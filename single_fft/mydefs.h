@@ -78,6 +78,15 @@ struct parameters
   double u[NCOEFF];//double bound_Agw[2],bound_gamma_gw[2];
 };
 
+void print_residuals(char * prefix, struct mypulsar psr)
+{
+  int i;
+  for (i = 0; i < psr.N; i++)
+    {
+      printf("%s %s %g  %g\n",prefix,psr.name,psr.toa->data[i],psr.res->data[i]);
+    }
+}
+
 
 extern void dtrmv_(char *uplo,char *TA,char *diag,int *n,double *a,int *lda,double * b,int * incx);
 

@@ -1,7 +1,7 @@
 //#include <gsl/gsl_matrix.h>
 //#include <gsl/gsl_math.h>
 
-#define NCOEFF 5
+#define NCOEFF 2
 #define NMEM 20
 
 #define THRESH 10000
@@ -52,7 +52,7 @@ struct my_matrix
 struct mypulsar
 {
   char name[50];
-  double raj,dec,tspan;
+  double raj,dec,tspan,det;
   int N,N_m,index;
   int n_be,n_sample;
   int * backends; //points to the first toa index for each backend
@@ -61,9 +61,10 @@ struct mypulsar
   double *sigma,*oldbat;
   double rA,rgamma;
   double dmA,dmgamma;
-  struct my_matrix *G,*CWN,*GNGinv,*phi_inv,*F,*H,*C,*Cinv,*L;
+  double tNt;
+  struct my_matrix *G,*CWN,*GNGinv,*phi_inv,*F,*H,*C,*Cinv,*L,*FNF;
   struct my_matrix *GF,*GH,*sample;
-  struct my_vector *toa,*res,*Gres,*obsfreqs;
+  struct my_vector *toa,*res,*Gres,*obsfreqs,*FNT;
 };
 
 struct parameters
@@ -71,10 +72,20 @@ struct parameters
   double tspan;
   double omega;
   double values[NCOEFF];
+  double tNt;
   //  double Agw, gamma_gw, fL;
   double l[NCOEFF];
   double u[NCOEFF];//double bound_Agw[2],bound_gamma_gw[2];
 };
+
+void print_residuals(char * prefix, struct mypulsar psr)
+{
+  int i;
+  for (i = 0; i < psr.N; i++)
+    {
+      printf("%s %s %g  %g\n",prefix,psr.name,psr.toa->data[i],psr.res->data[i]);
+    }
+}
 
 
 extern void dtrmv_(char *uplo,char *TA,char *diag,int *n,double *a,int *lda,double * b,int * incx);
@@ -96,6 +107,50 @@ extern void dgetrf_(int *m, int*n, double * a, int*lda, int*ipiv, int*info);
 extern void dgetri_(int*n, double * a, int*lda, int*ipiv, double *work, int *lwork, int*info);
 extern void dtrtri_(char *uplo, char *diag, int*n, double*a, int *lda, int*info);
 //#endif
+
+//this sorts an array of strings, returning an int array with the sorted arguments indices
+void argsort(char instrings[MAX_BE][MAX_FLAG_LEN], int sorted[], int n)
+{
+  int i,j,k;
+  int *skip;
+  skip = (int*)malloc(n * sizeof(int));
+  //search minimum and take it out
+  for (i = 0; i < n; i++)
+    skip[i] = -1;
+  int compare;
+  for (i = 0; i < n; i++)
+    {
+      int min = 0;
+      int minindex = -1;
+      for (j = 0; j < n; j++)
+	{
+	  //see if this one is already found
+	  int skipit = 0;
+	  for (k = 0; k < n; k++)
+	    {
+	      if (skip[k] == j)
+		skipit = 1;
+	    }
+	  if (skipit == 0)
+	    {
+	      if (minindex == -1)
+		//first element, assume min
+		minindex = j;
+	      else
+		{
+		  //compare to minindex one
+		  compare = strcmp(instrings[j],instrings[minindex]);
+		  if (compare < 0)
+		    minindex = j;
+		}
+	    }
+	}
+      //now i have the minimun, skip it
+      skip[i] = minindex;
+      sorted[i] = minindex;
+    }
+  free(skip);
+}
 
 double min(double a, double b)
 {
@@ -222,10 +277,7 @@ void my_matrix_init(struct my_matrix * mat, int m, int n)
 
 void my_matrix_set_zero(struct my_matrix *mat)
 {
-  int i,j;
-  for (j = 0; j < mat->n; j++)
-    for (i= 0; i < mat->m; i++)
-      mat->data[j*mat->m + i] = 0.0;
+  memset(mat->data,0.0,mat->n*mat->m*sizeof(double));
 }
 
 void my_matrix_cinit(struct my_matrix * mat, int m, int n)
@@ -671,7 +723,7 @@ int get_inverse_lu(struct my_matrix *m, struct my_matrix *lu, int dim, double *d
       ;
     }
   memcpy(lu->data,m->data,m->m*m->n*sizeof(double));
-
+#endif
   //compute determinant
   double d = 0.0;
   double sign = 1.0;
@@ -684,6 +736,7 @@ int get_inverse_lu(struct my_matrix *m, struct my_matrix *lu, int dim, double *d
 //	d -= log(lu->data[i*lu->m + i]);
     }
   *det = sign*d;
+#ifdef CULA
   s = culaDgetri(N,m->data,lda,ipiv);
   if(s != culaNoError)
     {
