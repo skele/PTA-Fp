@@ -1,7 +1,7 @@
 //#include <gsl/gsl_matrix.h>
 //#include <gsl/gsl_math.h>
 
-#define NCOEFF 8
+#define NCOEFF 400
 #define NMEM 20
 
 #define THRESH 10000
@@ -51,6 +51,7 @@ struct my_matrix
 
 struct mypulsar
 {
+  int stride;
   char name[50];
   double raj,dec,tspan,det;
   int N,N_m,index;
@@ -62,6 +63,7 @@ struct mypulsar
   double rA,rgamma;
   double dmA,dmgamma;
   double tNt;
+  double *efac,*equad,rnamp[NFFT/2],dmamp[NFFT/2];
   struct my_matrix *G,*CWN,*GNGinv,*phi_inv,*F,*H,*C,*Cinv,*L,*FNF;
   struct my_matrix *GF,*GH,*sample;
   struct my_vector *toa,*res,*Gres,*obsfreqs,*FNT;
@@ -69,6 +71,7 @@ struct mypulsar
 
 struct parameters
 {
+  int dim;
   double tspan;
   double omega;
   double values[NCOEFF];
@@ -77,6 +80,23 @@ struct parameters
   double l[NCOEFF];
   double u[NCOEFF];//double bound_Agw[2],bound_gamma_gw[2];
 };
+
+struct ObjFunc
+{
+  int dim; /* number of parameters in model */
+  int Nplsr;
+  struct mypulsar * pulsars;
+  struct parameters params;
+  struct my_matrix * a_ab, *phi;
+//   double *m; /* pointer to the set of mean's for each normal */
+//   double *sd; /* pointer to the array of standard dev's for each normal */
+  double *l,*u; /* the lower boundaries for the support of each normal */
+  double *x0, *xp0; /* two initial points */
+  gsl_rng *r;
+};
+
+typedef struct ObjFunc ObjFunc;
+
 
 void print_residuals(char * prefix, struct mypulsar psr)
 {
@@ -107,6 +127,50 @@ extern void dgetrf_(int *m, int*n, double * a, int*lda, int*ipiv, int*info);
 extern void dgetri_(int*n, double * a, int*lda, int*ipiv, double *work, int *lwork, int*info);
 extern void dtrtri_(char *uplo, char *diag, int*n, double*a, int *lda, int*info);
 //#endif
+
+//this sorts an array of strings, returning an int array with the sorted arguments indices
+void argsort(char instrings[MAX_BE][MAX_FLAG_LEN], int sorted[], int n)
+{
+  int i,j,k;
+  int *skip;
+  skip = (int*)malloc(n * sizeof(int));
+  //search minimum and take it out
+  for (i = 0; i < n; i++)
+    skip[i] = -1;
+  int compare;
+  for (i = 0; i < n; i++)
+    {
+      int min = 0;
+      int minindex = -1;
+      for (j = 0; j < n; j++)
+	{
+	  //see if this one is already found
+	  int skipit = 0;
+	  for (k = 0; k < n; k++)
+	    {
+	      if (skip[k] == j)
+		skipit = 1;
+	    }
+	  if (skipit == 0)
+	    {
+	      if (minindex == -1)
+		//first element, assume min
+		minindex = j;
+	      else
+		{
+		  //compare to minindex one
+		  compare = strcmp(instrings[j],instrings[minindex]);
+		  if (compare < 0)
+		    minindex = j;
+		}
+	    }
+	}
+      //now i have the minimun, skip it
+      skip[i] = minindex;
+      sorted[i] = minindex;
+    }
+  free(skip);
+}
 
 double min(double a, double b)
 {

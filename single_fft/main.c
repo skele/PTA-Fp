@@ -17,15 +17,16 @@
 #endif
 
 #define verbose 0
-#define NFFT 28
+#define NFFT 20
 #define N_SAMPLE_MAX 27000
 #define MAX_PSR 45
 #define MAX_BE 20
 
-#define ANGLES
+//#define ANGLES
 
 #include <mydefs.h>
 
+#include <twalk.h>
 //#define UPPER
 #define EFAC
 #define DM
@@ -49,9 +50,9 @@
 
 //#define SINGLE
 //#define RUNITY
-#define SS
+//#define SS
 #define REDNOISE
-#define POWERLAW
+//#define POWERLAW
 //#define SWITCHEROO
 
 #define ETA 0.05
@@ -76,6 +77,7 @@ void compute_Nwiggle(struct mypulsar * pulsar)
   int ibe;
 #endif
   //load up new red noise parameters
+#ifdef POWERLAW
 #ifdef DM
 #ifdef REDNOISE
   pulsar->rA = pow(10.0,pulsar->sample->data[pulsar->index*pulsar->sample->m + 0]);
@@ -86,6 +88,8 @@ void compute_Nwiggle(struct mypulsar * pulsar)
   if (verbose == 2)
     printf("rednoise %g\t%g\t DM    %g\t%g\n",pulsar->rA,pulsar->rgamma,pulsar->dmA,pulsar->dmgamma);
 #endif
+
+#endif
   for (j = 0; j < pulsar->N; j++)
     for (k = 0; k < pulsar->N; k++)
       {
@@ -93,8 +97,8 @@ void compute_Nwiggle(struct mypulsar * pulsar)
 	  {
 #ifdef EFAC
 	    ibe = pulsar->backends[j];
-	    efac = pulsar->sample->data[pulsar->index*pulsar->sample->m + 4 + ibe];
-	    equad = pow(10.0,pulsar->sample->data[pulsar->index*pulsar->sample->m + 4 + pulsar->n_be + ibe]);
+	    efac = pulsar->efac[ibe];
+	    equad = pow(10.0,pulsar->equad[ibe]);
 	    //	    printf("efac %d %g\t%g\n",ibe,efac,equad);
 	    pulsar->CWN->data[k*pulsar->N+j] = pulsar->sigma[j]*pulsar->sigma[j]*efac*efac + equad*equad;
 #else	 
@@ -263,7 +267,7 @@ void get_G_matrix(struct my_matrix * G, pulsar psr, struct mypulsar mypsr)
 
 }
 
-void initialize_pulsars_fromtempo(pulsar * tempo_psrs, struct mypulsar * pulsars, int Nplsr, int *Ndim, int *Ntot, struct parameters * par, int only_res)
+void initialize_pulsars_fromtempo(pulsar * tempo_psrs, struct mypulsar * pulsars, int Nplsr, int *Ndim, int *Ntot, struct parameters * par, int *alldim, int only_res)
 {
   FILE *infile;
   int i,j,k,l;
@@ -273,6 +277,7 @@ void initialize_pulsars_fromtempo(pulsar * tempo_psrs, struct mypulsar * pulsars
   //initialize a struct for each pulsar
   *Ndim = 0;
   *Ntot = 0;
+  int totstride = NFFT/2;//for first pulsar, because before we put GWB amplitudes
   for (i = 0; i < Nplsr; i++)
     {
       pulsar psr = tempo_psrs[i];
@@ -341,9 +346,42 @@ void initialize_pulsars_fromtempo(pulsar * tempo_psrs, struct mypulsar * pulsars
 	      //	  pulsars[i].backends[j] = psr.obsn[j].residual;
 	    }
 	}
-      //compute design matrix here
+      
+      //compute design matrix here and sort backends
       if (only_res == 0)
 	{
+	  //allocate efacs and equads
+	  pulsars[i].efac = (double *) malloc(pulsars[i].n_be * sizeof(double));
+	  pulsars[i].equad = (double *) malloc(pulsars[i].n_be * sizeof(double));
+
+	  //now I can compute the stride, i.e. the total amount of parameters for this pulsar to give to the next pulsar
+	  pulsars[i].stride = totstride;
+	  if (verbose)
+	    printf("Stride is %d\t%d\n",i,totstride);
+	  totstride += NFFT + 2*pulsars[i].n_be; //RN + DM + efac + equad
+	  int *sorted;
+	  sorted = (int *) malloc(pulsars[i].n_be * sizeof(int));
+	  argsort(backends,sorted,pulsars[i].n_be);
+	  if (verbose)
+	    for (j = 0; j < pulsars[i].n_be; j++)
+	      {
+		printf("Unsorted:\t%s\tsorted: %s\n",backends[j],backends[sorted[j]]);
+	      }
+	  //transform the backendids so they match alphabetical order
+	  for (j = 0; j < pulsars[i].N; j++)
+	    {
+	      int new = 0;
+	      while (sorted[new] != pulsars[i].backends[j])
+		new++;
+	      if (verbose == 3)
+		printf("%d\t%d\n",new,pulsars[i].backends[j]);
+	      pulsars[i].backends[j] = new;
+	    }
+	  
+
+	  free(sorted);
+
+
 	  int ma = psr.nParam;
 
 	  pulsars[i].N_m = pulsars[i].N - ma;
@@ -386,43 +424,7 @@ void initialize_pulsars_fromtempo(pulsar * tempo_psrs, struct mypulsar * pulsars
       //      my_vector_print(pulsars[i].Gres);
       if (only_res == 0)
 	{
-	  compute_H(&(pulsars[i]),par);
-
-#ifdef EFAC
-      //read in sampled data
-	  int xdim = 4+2*pulsars[i].n_be+1;
-	  pulsars[i].sample = my_matrix_alloc(xdim,N_SAMPLE_MAX);
-	  char infilename[100];
-	  sprintf(infilename,"%s/chains_Noise/Noise_post_equal_weights.dat",pulsars[i].name);
-	  if (verbose)
-	    printf("Opening %s\n",infilename);
-	  infile = fopen(infilename,"r");
-	  j = 0;
-	  int dobreak = 0;
-	  while (1)
-	    {
-	      //      for (j = 0; j < pulsars[i].n_sample; j++)
-	      for (k = 0; k < xdim; k++)
-		if (fscanf(infile,"%le",&(pulsars[i].sample->data[j*xdim + k])) == EOF)
-		  {
-		    dobreak = 1;
-		    break;
-		  }
-	      j++;
-	      if (dobreak)
-		break;
-	    }
-	  pulsars[i].n_sample = j;
-	  if (verbose == 2)
-	    {
-	      printf("first sample line:\n");
-	      for (k = 0; k < xdim; k++)
-		printf("%g\t",pulsars[i].sample->data[k]);
-	      printf("\n");
-	    }
-#endif
-	  //      compute_Nwiggle(&(pulsars[i]));
-      
+	  *alldim = totstride;
 	}
 
     }
@@ -804,18 +806,26 @@ void calculate_phi(struct my_matrix * a_ab, struct my_matrix * phi,struct parame
 #ifdef REDNOISE
               if (a == b)
                 {
+#ifdef POWERLAW
 		  double rAgw = pulsars[a].rA;
 		  double rgamma = pulsars[a].rgamma;
 		  double rfac = rAgw * rAgw / (12.0*PI*PI) * 3.16e22;
 		  power =  rfac* pow(f/3.17e-08,rgamma)/params.tspan;
+#else
+		  power = pow(10.0,pulsars[a].rnamp[i]);
+#endif
 		  phi->data[(ind_c+2*i)*phi->m + ind_r + 2*i] += power;
 		  phi->data[(ind_c+2*i+1)*phi->m + ind_r + 2*i + 1] += power;
 
 #ifdef DM
+#ifdef POWERLAW
 		  double dmAgw = pulsars[a].dmA;
 		  double dmgamma = pulsars[a].dmgamma;
 		  double dmfac = dmAgw * dmAgw / (12.0*PI*PI) * 3.16e22;
 		  power = dmfac * pow(f/3.17e-08,-dmgamma)/params.tspan;
+#else
+		  power = pow(10.0,pulsars[a].dmamp[i]);
+#endif
 		  phi->data[(NFFT*Nplsr+ind_c+2*i)*phi->m  + NFFT*Nplsr + ind_r + 2*i] = power;
 		  phi->data[(NFFT*Nplsr+ind_c+2*i+1)*phi->m + NFFT*Nplsr + ind_r + 2*i + 1] = power;
 #endif
@@ -911,11 +921,83 @@ struct Fp compute_Fp(struct mypulsar * pulsars, struct parameters * par, int Npl
   return coeff;
 }
 
-double compute_likelihood(struct my_matrix * phi,struct mypulsar * pulsars, int Nplsr)
+void ObjFuncRandomizePoint(ObjFunc *S, double *x)
 {
+  int i;
+  for (i = 0; i < S->dim; i++)
+    {
+      x[i] = gsl_ran_flat(S->r, S->l[i], S->u[i]);
+      if (verbose)
+	printf("Randomized %d\t%f\t%f\t%f\n",i,S->l[i],x[i],S->u[i]);
+    }
+}
+
+void ObjFuncInitLimits(ObjFunc *S)
+{
+  int i,j;
+  int Nplsr = S->Nplsr;
+  for (i = 0; i < NFFT/2; i++)
+    {
+      S->l[i] = -20.0; // GWB
+      S->u[i] = -8.0; // GWB
+    }
+  for (i = 0; i < S->Nplsr; i++)
+    {
+      int stride = S->pulsars[i].stride;
+      if (verbose)
+	printf("Strideeeeeeeeeeeeeeeeeeeeeeeeee %d\t%d\n",i,stride);
+      for (j = 0; j < NFFT/2; j++)
+	{
+	  S->l[stride + j] = -20.0;
+	  S->l[stride + NFFT/2 + j] = -20.0;
+	  S->u[stride + j] = -8.0;
+	  S->u[stride + NFFT/2 + j] = -8.0;
+	}
+      for (j = 0; j < S->pulsars[i].n_be; j++)
+	{
+	  S->l[stride + NFFT + j] = 0.1;
+	  S->u[stride + NFFT + j] = 5.0;
+	  S->l[stride + NFFT + S->pulsars[i].n_be + j] = -10.0;
+	  S->u[stride + NFFT + S->pulsars[i].n_be + j] = -3.0;
+	}
+    }
+
+}
+
+double ObjFuncEval(ObjFunc *S, double *x, int prime)
+{
+  //double compute_likelihood(struct my_matrix * phi,struct mypulsar * pulsars, int Nplsr)
+  //{
+  //copy all params x into appropriate places
+  int i,j;
+  int Nplsr = S->Nplsr;
+  for (i = 0; i < NFFT/2; i++)
+    S->params.values[i] = x[i]; // GWB
+  for (i = 0; i < S->Nplsr; i++)
+    {
+      int stride = S->pulsars[i].stride;
+      for (j = 0; j < NFFT/2; j++)
+	{
+	  S->pulsars[i].rnamp[j] = x[stride + j];
+	  S->pulsars[i].dmamp[j] = x[stride + NFFT/2 + j];
+	}
+      for (j = 0; j < S->pulsars[i].n_be; j++)
+	{
+	  S->pulsars[i].efac[j] = x[stride + NFFT + j];
+	  S->pulsars[i].equad[j] = x[stride + NFFT + S->pulsars[i].n_be + j];
+	}
+    }
+
+  //rebuild FNF and stuff
+  for (i = 0; i < Nplsr; i++)
+    {
+      compute_C_matrix(&(S->pulsars[i]),&(S->params));
+    }
+
+  calculate_phi(S->a_ab,S->phi,S->params,S->Nplsr,S->pulsars);
+
   double likeli = 0.0;
   double tNt = 0.0;
-  int i;
   //get inverse of phi                                                                                                                                                   
   struct my_matrix * phiinv;
   struct my_matrix * sigmainv;
@@ -932,7 +1014,7 @@ double compute_likelihood(struct my_matrix * phi,struct mypulsar * pulsars, int 
   cholesky_phi = my_matrix_alloc(NFFT*Nplsr,NFFT*Nplsr);
   cholesky_sigma = my_matrix_alloc(NFFT*Nplsr,NFFT*Nplsr);
 #endif
-  my_matrix_memcpy(phiinv,phi);
+  my_matrix_memcpy(phiinv,S->phi);
   //my_matrix_memcpy(sigmainv,FNF);
   
   double  detPhi = 0.0;
@@ -950,14 +1032,14 @@ double compute_likelihood(struct my_matrix * phi,struct mypulsar * pulsars, int 
     printf("My inversion of phi work\n");
 #endif
   //construct phiinv + FNF object
-  int a,b,j;
+  int a,b;
   int ind_c = 0,ind_r = 0;
   my_matrix_memcpy(sigmainv,phiinv);
   for (a = 0; a < Nplsr; a++)
     {
       for (i = 0; i < NFFT; i++)
 	for (j = 0; j < NFFT; j++)
-	  sigmainv->data[(i + ind_c)*sigmainv->m + ind_c + j] += pulsars[a].FNF->data[i*pulsars[a].FNF->m + j];
+	  sigmainv->data[(i + ind_c)*sigmainv->m + ind_c + j] += S->pulsars[a].FNF->data[i*S->pulsars[a].FNF->m + j];
       ind_c += NFFT;
     }
 
@@ -980,7 +1062,7 @@ double compute_likelihood(struct my_matrix * phi,struct mypulsar * pulsars, int 
 #endif
   for (a = 0; a < Nplsr; a++)
     for (i = 0; i < NFFT; i++)
-      FNTbig->data[a*NFFT + i] = pulsars[a].FNT->data[i];
+      FNTbig->data[a*NFFT + i] = S->pulsars[a].FNT->data[i];
   double dsd;
   //combine FNT into FNTbig vector
   my_dgemv(CblasNoTrans,1.0,sigmainv,FNTbig,0.0,dsigma); 
@@ -989,8 +1071,8 @@ double compute_likelihood(struct my_matrix * phi,struct mypulsar * pulsars, int 
   double detN = 0.0;
   for (i = 0; i < Nplsr; i++)
     {
-      tNt += pulsars[i].tNt;
-      detN += pulsars[i].det;
+      tNt += S->pulsars[i].tNt;
+      detN += S->pulsars[i].det;
     }
 
   likeli = tNt-dsd;
@@ -1664,6 +1746,7 @@ void add_signal(struct mypulsar *psr, pulsar * t_psr, struct parameters params, 
 }
 
 
+
 int main(int argc, char *argv[])
 {
 #ifdef MPI
@@ -1709,23 +1792,27 @@ s = culaInitialize();
   FILE *ofile;
 
   //to hold all pulsar information, including individual G matrices
-  struct mypulsar *pulsars;
+  ObjFunc All;
+
+  //  struct mypulsar *pulsars;
   pulsar * tempo_psrs;
   ofile = fopen(argv[1],"w");
-  Nplsr = (argc-3);
+  Nplsr = (argc-2);
   //read filenames
   
   tempo_psrs = (pulsar *) malloc(MAX_PSR*sizeof(pulsar));
 
-  struct parameters params;
-  params.omega = 2.0*PI*atof(argv[2]);
+  //  struct parameters params;
+  //  All.params.omega = 2.0*PI*atof(argv[2]);
 
   for (i = 0; i < Nplsr; i++)
     {
       //      filenames[i] = (char *) malloc(60*sizeof(char));
-      strcpy(pulsarname[i],argv[i+3]);
-      sprintf(filenames[i],"%s/%s_mod.tim",pulsarname[i],pulsarname[i]);
-      sprintf(parfilenames[i],"%s/%s.par",pulsarname[i],pulsarname[i]);
+      strcpy(pulsarname[i],argv[i+2]);
+//      sprintf(filenames[i],"%s/%s_mod.tim",pulsarname[i],pulsarname[i]);
+//      sprintf(parfilenames[i],"%s/%s.par",pulsarname[i],pulsarname[i]);
+      sprintf(filenames[i],"%s.tim",pulsarname[i]);
+      sprintf(parfilenames[i],"%s.par",pulsarname[i]);
       if (verbose)
 	printf("Read %s\t%s\n",filenames[i],parfilenames[i]);
     }
@@ -1743,21 +1830,32 @@ s = culaInitialize();
 
   double tend = omp_get_wtime();
   //  printf("%g\n",tend-tstart);
-  pulsars = (struct mypulsar *) malloc(Nplsr * sizeof(struct mypulsar));
+  All.pulsars = (struct mypulsar *) malloc(Nplsr * sizeof(struct mypulsar));
 
   for (i = 0; i < Nplsr; i++)
     {
-      strcpy(pulsars[i].name,pulsarname[i]);
+      strcpy(All.pulsars[i].name,pulsarname[i]);
     }
 
-  gsl_rng *r;
-  r = gsl_rng_alloc (gsl_rng_mt19937);
-  gsl_rng_set(r,time(NULL));
+  All.Nplsr = Nplsr;
+
+  //  gsl_rng *r;
+  All.r = gsl_rng_alloc (gsl_rng_mt19937);
+  gsl_rng_set(All.r,time(NULL));
   /* ------------------------- */
   tstart = omp_get_wtime();
-  initialize_pulsars_fromtempo(tempo_psrs,pulsars,Nplsr,&Ndim,&Ntot,&params,0);
+  initialize_pulsars_fromtempo(tempo_psrs,All.pulsars,Nplsr,&Ndim,&Ntot,&(All.params),&(All.dim),0);
   tend = omp_get_wtime();
   //  printf("init took %f sec\n",tend-tstart);
+
+  All.l = (double *) malloc(All.dim * sizeof(double));
+  All.u = (double *) malloc(All.dim * sizeof(double));
+  All.x0 = (double *) malloc(All.dim * sizeof(double));
+  All.xp0 = (double *) malloc(All.dim * sizeof(double));
+
+  ObjFuncInitLimits(&All);
+  ObjFuncRandomizePoint(&All,All.x0);
+  ObjFuncRandomizePoint(&All,All.xp0);
 
   //Ntot = total number of residuals.pu Ndim = reduced number of residuals
   /* ------------------------- */
@@ -1765,70 +1863,80 @@ s = culaInitialize();
 
   for (i = 0; i < Nplsr; i++)
     {
-      pulsars[i].freqs[NFFT/2-1] = params.omega/(2.0*PI);//the freq to be investigated
-      pulsars[i].index = pulsars[i].n_sample-2;
+      //      All.pulsars[i].freqs[NFFT/2-1] = All.params.omega/(2.0*PI);//the freq to be investigated
+      //All.pulsars[i].index = All.pulsars[i].n_sample-2;
       //here I compute FNF per pulsar
-      compute_C_matrix(&(pulsars[i]),&params); //computes FNF and FNT
+      compute_C_matrix(&(All.pulsars[i]),&(All.params)); //computes FNF and FNT
     }
 
   FILE * outfile;
   char oname[50];
   double tstart_tot = omp_get_wtime();
 
-  params.tspan = 0.0;
+  All.params.tspan = 0.0;
   for (i = 0; i < Nplsr; i++)
-    if (pulsars[i].tspan > params.tspan)
-      params.tspan = pulsars[i].tspan;
+    if (All.pulsars[i].tspan > All.params.tspan)
+      All.params.tspan = All.pulsars[i].tspan;
 
-  struct my_matrix * a_ab;
-  struct my_matrix * phi;
+//  struct my_matrix * a_ab;
+//  struct my_matrix * phi;
 
-  a_ab = my_matrix_alloc(Nplsr,Nplsr);
+  All.a_ab = my_matrix_alloc(Nplsr,Nplsr);
 #ifdef DM
-  phi = my_matrix_alloc(Nplsr*NFFT*2,Nplsr*NFFT*2);
+  All.phi = my_matrix_alloc(Nplsr*NFFT*2,Nplsr*NFFT*2);
 #else
-  phi = my_matrix_alloc(Nplsr*NFFT,Nplsr*NFFT);
+  All.phi = my_matrix_alloc(Nplsr*NFFT,Nplsr*NFFT);
 #endif
-  init_a_ab(pulsars,a_ab,Nplsr);
+  init_a_ab(All.pulsars,All.a_ab,All.Nplsr);
 
   double detGNG = 0.0;
 
   int offset = 2;
-  params.u[0] = -13.0;
-  params.l[0] = -17.0;
-  params.u[1] = 5.0;
-  params.l[1] = 3.0;
+  All.params.u[0] = -13.0;
+  All.params.l[0] = -17.0;
+  All.params.u[1] = 5.0;
+  All.params.l[1] = 3.0;
 #ifdef SS
-  params.l[offset+0] = 0.0;//source theta                                                                                                                                
-  params.u[offset+0] = PI;
-  params.l[offset+1] = 0.0;//source phi                                                                                                                                  
-  params.u[offset+1] = 2.0*PI;//2.0*PI-0.02;                                                                                                                             
-//  params.l[offset+0] = 0.7;//source theta                                                                                                                                
-//  params.u[offset+0] = 1.3;
-//  params.l[offset+1] = 1.0;//source phi                                                                                                                                  
-//  params.u[offset+1] = 2.0;//2.0*PI-0.02;                                                                                                                             
-  params.l[offset+2] = -20.0;//log of amplitude                                                                                                                         
-  params.u[offset+2] = -6.0;
+  All.params.l[offset+0] = 0.0;//source theta                                                                                                                                
+  All.params.u[offset+0] = PI;
+  All.params.l[offset+1] = 0.0;//source phi                                                                                                                                  
+  All.params.u[offset+1] = 2.0*PI;//2.0*PI-0.02;                                                                                                                             
+//  All.params.l[offset+0] = 0.7;//source theta                                                                                                                                
+//  All.params.u[offset+0] = 1.3;
+//  All.params.l[offset+1] = 1.0;//source phi                                                                                                                                  
+//  All.params.u[offset+1] = 2.0;//2.0*PI-0.02;                                                                                                                             
+  All.params.l[offset+2] = -20.0;//log of amplitude                                                                                                                         
+  All.params.u[offset+2] = -6.0;
 #endif
 #ifdef ANGLES
-  params.l[offset+3] = 0.0;//psi
-  params.u[offset+3] = PI;
-  params.l[offset+4] = 0.0;//iota                                                                                                                                       
-  params.u[offset+4] = PI;
-  params.l[offset+5] = 0.0;//phi0                                                                                                                                     
-  params.u[offset+5] = 2.0*PI;
+  All.params.l[offset+3] = 0.0;//psi
+  All.params.u[offset+3] = PI;
+  All.params.l[offset+4] = 0.0;//iota                                                                                                                                       
+  All.params.u[offset+4] = PI;
+  All.params.l[offset+5] = 0.0;//phi0                                                                                                                                     
+  All.params.u[offset+5] = 2.0*PI;
 
 #endif
-  
-  struct source source_pars;
-  source_pars.Amp = pow(10.0,-12.5);
-  source_pars.theta_s = 1.0;
-  source_pars.phi_s = 1.5;
-  source_pars.Mc = 1e9;
-  source_pars.psi = 1.0;
-  source_pars.phi0 = 2.5;
-  source_pars.iota = 0.8;
-  source_pars.fr = 5.12691e-08;
+
+  FILE *fp;
+
+   fp = fopen("twalk.out", "w");
+
+   TWalk twalk;
+   RandomSeed(&RNG, (unsigned long int)53);
+   TWalkCTOR(&twalk, &All, All.x0,
+             All.xp0, ObjFuncGetDim(&All));
+   (void)TWalkSimulation(&twalk, 10000, fp, 1, NULL, NULL);
+
+//  struct source source_pars;
+//  source_pars.Amp = pow(10.0,-12.5);
+//  source_pars.theta_s = 1.0;
+//  source_pars.phi_s = 1.5;
+//  source_pars.Mc = 1e9;
+//  source_pars.psi = 1.0;
+//  source_pars.phi0 = 2.5;
+//  source_pars.iota = 0.8;
+//  source_pars.fr = 5.12691e-08;
 
   //  print_residuals("PRE",pulsars[2]);
 //  for (i = 0; i < Nplsr; i++)
