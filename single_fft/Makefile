@@ -1,6 +1,6 @@
 ## Makefile                                                                                                                                                             
 CC=gcc
-CFLAGS= -g#-pg#-O3# -pthread
+CFLAGS= -O3# -pthread
  
 HOST:=$(shell hostname | cut -d . -f 1)
 
@@ -13,6 +13,12 @@ ifeq ($(HOST), pinatubo)
 INC=-I$(TEMPO2)/include -I. -L$(TEMPO2)/lib -ltempo2 -lblas -llapack -lgsl -lgslcblas -lm -lgomp
 INCCULA=-I$(TEMPO2)/include -I. -I/home/pbrem/cula/include -L/home/pbrem/cula/lib64 -L$(TEMPO2)/lib -ltempo2 -lcudart  -lcublas -lcula_lapack -lgsl -lgslcblas -lm -lgomp
 endif
+
+ifeq ($(HOST), krakatoa)
+INC=-I$(TEMPO2)/include -I. -L$(TEMPO2)/lib -ltempo2 -lblas -llapack -lgsl -lgslcblas -lm -lgomp
+INCCULA=-I$(TEMPO2)/include -I. -I/home/pbrem/cula/include -L/home/pbrem/cula/lib64 -L$(TEMPO2)/lib -ltempo2 -lcudart  -lcublas -lcula_lapack -lgsl -lgslcblas -lm -lgomp
+endif
+
 
 all: main.c
 	$(CC) $(CFLAGS) -o pca_search $^ $(INC)

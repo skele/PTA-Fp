@@ -17,7 +17,7 @@
 #endif
 
 #define verbose 0
-#define NFFT 30
+#define NFFT 100
 #define N_SAMPLE_MAX 27000
 #define MAX_PSR 45
 #define MAX_BE 20
@@ -46,7 +46,7 @@
 //#define PCA
 
 //#define SINGLE
-//#define RUNITY
+//#define CUNITY
 
 #define REDNOISE
 //#define POWERLAW
@@ -451,7 +451,7 @@ void initialize_pulsars_fromtempo(pulsar * tempo_psrs, struct mypulsar * pulsars
 	      int new = 0;
 	      while (sorted[new] != pulsars[i].backends[j])
 		new++;
-	      if (verbose)
+	      if (verbose == 3)
 		printf("%d\t%d\n",new,pulsars[i].backends[j]);
 	      pulsars[i].backends[j] = new;
 	    }
@@ -613,11 +613,13 @@ void calculate_phi_inv_per_pulsar(struct mypulsar * psr,struct parameters par)
       f = psr->freqs[i];
       //      power = rfac* pow(f/3.17e-08,-rgamma) / par.tspan;
       //add red noise for diagonal elements
-      power = rfac * pow(f/3.17e-08,-rgamma)/psr->tspan;
+      //      power = rfac * pow(f/3.17e-08,-rgamma)/psr->tspan;
+      power = rfac * pow(f/3.17e-08,-rgamma);
       psr->phi_inv->data[(2*i)*psr->phi_inv->m  + 2*i] = 1.0/power;
       psr->phi_inv->data[(2*i+1)*psr->phi_inv->m + 2*i + 1] = 1.0/power;
 #ifdef DM
-      power = dmfac * pow(f/3.17e-08,-dmgamma)/psr->tspan;
+      //      power = dmfac * pow(f/3.17e-08,-dmgamma)/psr->tspan;
+      power = dmfac * pow(f/3.17e-08,-dmgamma);
       psr->phi_inv->data[(NFFT+2*i)*psr->phi_inv->m  + NFFT + 2*i] = 1.0/power;
       psr->phi_inv->data[(NFFT+2*i+1)*psr->phi_inv->m + NFFT + 2*i + 1] = 1.0/power;
 #endif
@@ -697,11 +699,19 @@ void compute_C_matrix(struct mypulsar * psr, struct parameters * par)
   my_dgemm(CblasTrans,CblasNoTrans,1.0,FN,FNFFN,0.0,psr->Cinv);
   //my_matrix_print("Nwiggle\0",pulsars[i].Nwiggle);
   //      my_matrix_print("C\0",C);
-  
+#ifndef CUNITY  
 #ifdef REDNOISE
   my_matrix_sub(psr->GNGinv,psr->Cinv);
 #else
   my_matrix_memcpy(psr->Cinv,psr->GNGinv);
+#endif
+#else
+  my_matrix_set_zero(psr->Cinv);
+  int i;
+  for (i = 0; i < psr->N_m; i++)
+    {
+      psr->Cinv->data[psr->N_m*i + i] = 1.0;
+    }
 #endif
       //now C is C^-1!
   my_matrix_free(FNFFN);
@@ -1171,8 +1181,8 @@ s = culaInitialize();
       pulsars[i].rA = pow(10.0,-14.35);
       pulsars[i].rgamma = 1.52;
 #endif
-      //      pulsars[i].index = pulsars[i].n_sample-2;
-      pulsars[i].index = 0;
+      pulsars[i].index = pulsars[i].n_sample-2;
+      //pulsars[i].index = 0;
       compute_C_matrix(&(pulsars[i]),&params);
     }
 
@@ -1199,7 +1209,7 @@ s = culaInitialize();
 #else
   double fstep = 0.01;
   double fmin = log10(1.0/params.tspan);
-  double fmax = log10(5.e-07);
+  double fmax = log10(5.e-06);
   double * h_freqs;
   int nfreqs = (int) ((fmax-fmin)/fstep);
 #endif
