@@ -17,7 +17,7 @@
 #endif
 
 #define verbose 0
-#define NFFT 16
+#define NFFT 40
 #define N_SAMPLE_MAX 27000
 #define MAX_PSR 45
 #define MAX_BE 20
@@ -29,9 +29,9 @@
 #include <twalk.h>
 //#define UPPER
 //#define EFAC
-//#define DM
+#define DM
 
-#define GWB
+//#define GWB
 
 #define K_DM 2.41E-4 //in Mhz^-2 pc s^-1
 
@@ -440,10 +440,15 @@ void initialize_pulsars_fromtempo(pulsar * tempo_psrs, struct mypulsar * pulsars
 #ifndef POWERLAW
 	  *alldim = totstride;
 #else
+	  *alldim = 0;
+#ifdef GWB
+	  *alldim += 2;
+#endif
 #ifdef REDNOISE
-	  *alldim = 4;
-#else
-	  *alldim = 2;
+	  *alldim += 2;
+#endif
+#ifdef DM
+	  *alldim += 2;
 #endif
 #endif
 	}
@@ -465,7 +470,7 @@ void initialize_pulsars_fromtempo(pulsar * tempo_psrs, struct mypulsar * pulsars
 	      if ((pulsars[a].toa->data[b]) < tmin)
 		tmin = pulsars[a].toa->data[b];
 	    }
-      temp = (tmax - tmin);
+      temp = 2.0*(tmax - tmin);
       //temp = *tspan*1.306;                                                                                                                                                 
       //  temp = *tspan;
       //temp = *tspan*1.18;                                                                                                                                                  
@@ -596,6 +601,8 @@ void compute_C_matrix(struct mypulsar * psr, struct parameters * par)
     printf("Compute fft\n");
   tstart = omp_get_wtime();
   initialize_fft_per_pulsar(psr,par);
+  if (verbose == 2)
+    my_matrix_print("FFT\0",psr->F);
   tend = omp_get_wtime();
   if (verbose == 3)
     printf("compute_fft\t\t\t%g\n",tend-tstart);
@@ -787,10 +794,16 @@ void calculate_phi(struct my_matrix * a_ab, struct my_matrix * phi,struct parame
   double f;
   int ind_r,ind_c;
   double power;
+  int offset = 0;
+#ifdef GWB
+  offset = 2;
+#endif
   my_matrix_set_zero(phi);
 #ifdef POWERLAW
-  double Agw = pow(10.0,params.values[0]);
+#ifdef GWB
+  double Agw = params.values[0];
   double fac = Agw * Agw / (12.0*PI*PI) * 3.16e22;
+#endif
 #endif
 
 #ifdef SS
@@ -804,10 +817,10 @@ void calculate_phi(struct my_matrix * a_ab, struct my_matrix * phi,struct parame
           ind_c = NFFT*b;
           for (i = 0; i < NFFT/2; i++)
             {
+              f = pulsars[a].freqs[i]; // or b because they have to be the same
 #ifdef GWB
 #ifdef POWERLAW
               //f = (float) (i+1) * ffund;                                                                                                                               
-              f = pulsars[a].freqs[i]; // or b because they have to be the same
               power =  a_ab->data[b*a_ab->m + a]*fac* pow(f/3.17e-08,-params.values[1])/params.tspan;
 #else
               power =  a_ab->data[b*a_ab->m + a]*pow(10.0,params.values[i]);
@@ -834,6 +847,8 @@ void calculate_phi(struct my_matrix * a_ab, struct my_matrix * phi,struct parame
 		  double rAgw = pulsars[a].rA;
 		  double rgamma = pulsars[a].rgamma;
 		  double rfac = rAgw * rAgw / (12.0*PI*PI) * 3.16e22;
+		  if (verbose)
+		    printf("Adding red noise %g\t%g\n",rfac,rgamma);
 		  power =  rfac* pow(f/3.17e-08,rgamma)/params.tspan;
 #else
 		  power = pow(10.0,pulsars[a].rnamp[i]);
@@ -989,17 +1004,26 @@ void ObjFuncInitLimits(ObjFunc *S)
 	}
     }
 #else
+  int offset = 0;
 #ifdef GWB
-  S->l[0] = -16.0;
-  S->u[0] = -12.0;
-  S->l[1] = 3.0;
-  S->u[1] = 5.5;
+  S->l[offset] = -16.0;
+  S->u[offset] = -12.0;
+  S->l[offset+1] = 3.0;
+  S->u[offset+1] = 6.0;
+  offset += 2;
 #endif
 #ifdef REDNOISE
-  S->l[2] = -20.0;
-  S->u[2] = -12.0;
-  S->l[3] = 1.0;
-  S->u[3] = 6.5;
+  S->l[offset] = -20.0;
+  S->u[offset] = -3.0;
+  S->l[offset+1] = 0.0;
+  S->u[offset+1] = 5.0;
+  offset += 2;
+#endif
+#ifdef DM
+  S->l[offset] = -20.0;
+  S->u[offset] = -5.0;
+  S->l[offset+1] = 0.0;
+  S->u[offset+1] = 5.0;
 #endif
 #endif
 
@@ -1032,13 +1056,27 @@ double ObjFuncEval(ObjFunc *S, double *x, int prime)
 	}
     }
 #else
-  S->params.values[0] = x[0];
+  int offset = 0;
+#ifdef GWB
+  S->params.values[0] = pow(10.0,x[0]);
   S->params.values[1] = x[1];
+  offset = 2;
+#endif
+#ifdef REDNOISE
   for (i = 0; i < S->Nplsr; i++)
     {
-      S->pulsars[i].rA = x[2];
-      S->pulsars[i].rgamma = x[3];
+      S->pulsars[i].rA = pow(10.0,x[offset]);
+      S->pulsars[i].rgamma = x[offset+1];
     }
+  offset +=2;
+#endif
+#ifdef DM
+  for (i = 0; i < S->Nplsr; i++)
+    {
+      S->pulsars[i].dmA = pow(10.0,x[offset]);
+      S->pulsars[i].dmgamma = x[offset+1];
+    }
+#endif
 #endif
   //rebuild FNF and stuff
   for (i = 0; i < Nplsr; i++)
@@ -1077,9 +1115,17 @@ double ObjFuncEval(ObjFunc *S, double *x, int prime)
 //  if (get_inverse_cholesky(phiinv,cholesky_phi,NFFT*Nplsr) == 0 && (verbose))                             
 //    printf("My inversion of phi work\n");
 #ifdef DM
+  int dmtemp = 2;
+
+  if (verbose)
+    {
+      printf("Inverting phi\n");
+      my_matrix_print("Phi\0",phiinv);
+    }
   if (get_inverse_lu(phiinv,cholesky_phi,2*NFFT*Nplsr,&detPhi) == 0 && (verbose))
     printf("My inversion of phi work\n");
 #else
+  int dmtemp = 1;
   if (get_inverse_lu(phiinv,cholesky_phi,NFFT*Nplsr,&detPhi) == 0 && (verbose))
     printf("My inversion of phi work\n");
 #endif
@@ -1089,10 +1135,10 @@ double ObjFuncEval(ObjFunc *S, double *x, int prime)
   my_matrix_memcpy(sigmainv,phiinv);
   for (a = 0; a < Nplsr; a++)
     {
-      for (i = 0; i < NFFT; i++)
-	for (j = 0; j < NFFT; j++)
+      for (i = 0; i < (dmtemp*NFFT); i++)
+	for (j = 0; j < (dmtemp*NFFT); j++)
 	  sigmainv->data[(i + ind_c)*sigmainv->m + ind_c + j] += S->pulsars[a].FNF->data[i*S->pulsars[a].FNF->m + j];
-      ind_c += NFFT;
+      ind_c += (dmtemp*NFFT);
     }
 
   //invert Sigma
@@ -1113,8 +1159,8 @@ double ObjFuncEval(ObjFunc *S, double *x, int prime)
   FNTbig = my_vector_alloc(NFFT*Nplsr);
 #endif
   for (a = 0; a < Nplsr; a++)
-    for (i = 0; i < NFFT; i++)
-      FNTbig->data[a*NFFT + i] = S->pulsars[a].FNT->data[i];
+    for (i = 0; i < (dmtemp*NFFT); i++)
+      FNTbig->data[a*(dmtemp*NFFT) + i] = S->pulsars[a].FNT->data[i];
   double dsd;
   //combine FNT into FNTbig vector
   my_dgemv(CblasNoTrans,1.0,sigmainv,FNTbig,0.0,dsigma); 
