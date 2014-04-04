@@ -1,0 +1,10 @@
+universe     = vanilla
+executable   = /home/pbrem/PTA-Fp/Steve/wrapper.sh
+arguments    = $(Process)
+environment  = OUTDIR=.;TEMPO2=/home/pbrem/tempo;LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:/home/pbrem/cula/lib64:/home/pbrem/tempo/lib
+output       = $(Process).out
+error        = $(Process).err
+log          = $(Process).log
+notification = Never
+
+queue 32

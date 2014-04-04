@@ -6,6 +6,11 @@
 
 #define THRESH 10000
 
+#define HAVEDIST 27
+
+char distance_keys[HAVEDIST][11] = {"J0030+0451\0","J0610-2100\0","J0613-0200\0","J0751+1807\0","J0900-3144\0","J1012+5307\0","J1024-0719\0","J1455-3330\0","J1600-3053\0","J1640+2224\0","J1643-1224\0","J1713+0747\0","J1730-2304\0","J1738+0333\0","J1744-1134\0","J1804-2717\0","J1857+0943\0","J1909-3744\0","J1910+1256\0","J1918-0642\0","J1939+2134\0","J2010-1323\0","J2019+2425\0","J2124-3358\0","J2145-0750\0","J2317+1439\0","J2322+2057"} ;
+double distance_values[HAVEDIST] = {0.28,5.64,0.9,0.4,0.82,0.7,0.49,0.74,2.4,1.19,0.42,1.05,0.51,1.97,0.42,1.17,0.9,1.26,1.95,1.4,5.0,1.29,0.91,0.3,0.57,1.89,0.78};
+
 enum CBLAS_ORDER {CblasRowMajor=101, CblasColMajor=102 };
 
 enum CBLAS_TRANSPOSE {CblasNoTrans=111, CblasTrans=112, CblasConjTrans=113,
@@ -52,7 +57,7 @@ struct my_matrix
 struct mypulsar
 {
   char name[50];
-  double raj,dec,tspan,det;
+  double raj,dec,tspan,det,dist;
   int N,N_m,index;
   int n_be,n_sample;
   int * backends; //points to the first toa index for each backend

@@ -16,12 +16,12 @@
 #include <mpi.h>
 #endif
 
-#define verbose 1
-#define NFFT 80
+#define verbose 2
+#define NFFT 40
 #define N_SAMPLE_MAX 27000
 #define MAX_PSR 45
 #define MAX_BE 30
-#define NF0 2000
+#define NF0 100
 
 #include <mydefs.h>
 
@@ -773,7 +773,7 @@ void add_signal(struct mypulsar *psr, pulsar * t_psr, struct parameters params, 
 {
   double theta_a = 0.5*PI - psr->dec;
   double phi_a = psr->raj;
-  double L_a = 1.0; //distance to the pulsar
+  double L_a = psr->dist; //distance to the pulsar
   
   double theta_s = source_pars.theta_s;
   double phi_s = source_pars.phi_s;
@@ -902,7 +902,7 @@ struct Fp compute_Fp(struct mypulsar * pulsars, struct parameters * par, int Npl
   for (i = 0; i < Nplsr; i++)
     {
       //use only pulsars with appropriate observation span
-      if ((2.0*1.0/pulsars[i].tspan) > (par->omega/(2.0*PI)))
+      if ((1.0/pulsars[i].tspan) > (par->omega/(2.0*PI)))
 	{
 	  if (verbose)
 	    {
@@ -1161,6 +1161,20 @@ s = culaInitialize();
   for (i = 0; i < Nplsr; i++)
     {
       strcpy(pulsars[i].name,pulsarname[i]);
+      //find distance from distance.dat file
+      int foundit = 0;
+      for (j = 0; j < HAVEDIST; j++)
+	{
+	  if (strcmp(pulsarname[i],distance_keys[j]) == 0)
+	    {
+	      pulsars[i].dist = distance_values[j];
+	      foundit = 1;
+	      //	      printf("Found distance\t%s\t%g\n",pulsarname[i],pulsars[i].dist);
+	    }
+	}
+      if (foundit == 0)
+	pulsars[i].dist = 1.0;
+
     }
 
   gsl_rng *r;
@@ -1226,13 +1240,13 @@ s = culaInitialize();
 #ifdef UPPER
   struct source source_pars;
   params.omega = 2.0*PI*atof(argv[2]);
-  source_pars.Amp = pow(10.0,atof(argv[3]));
+  source_pars.Amp = 0.4*pow(10.0,atof(argv[3])); // factor of sqrt(5)/sqrt(2)/4
   //compute to find out how many pulsars we are using here to get detection threshold value
   Fp = compute_Fp(pulsars,&params,Nplsr);
-  double threshs[45] = { 0.000000, 14.700000, 17.600000, 20.100000, 22.350000, 24.450000, 26.500000, 28.400000, 30.300000, 32.100000, 33.900000, 35.650000, 37.350000, 39.000000, 40.650000, 42.300000, 43.900000, 45.500000, 47.100000, 48.650000, 50.200000, 51.750000, 53.250000, 54.800000, 56.300000, 57.750000, 59.250000, 60.700000, 62.200000, 63.650000, 65.100000, 66.550000, 67.950000, 69.400000, 70.800000, 72.250000, 73.650000, 75.050000, 76.450000, 77.850000, 79.200000, 80.600000, 82.000000, 83.350000, 84.750000};
-  double threshold = threshs[Fp.used];
+  //  double threshs[45] = { 0.000000, 14.700000, 17.600000, 20.100000, 22.350000, 24.450000, 26.500000, 28.400000, 30.300000, 32.100000, 33.900000, 35.650000, 37.350000, 39.000000, 40.650000, 42.300000, 43.900000, 45.500000, 47.100000, 48.650000, 50.200000, 51.750000, 53.250000, 54.800000, 56.300000, 57.750000, 59.250000, 60.700000, 62.200000, 63.650000, 65.100000, 66.550000, 67.950000, 69.400000, 70.800000, 72.250000, 73.650000, 75.050000, 76.450000, 77.850000, 79.200000, 80.600000, 82.000000, 83.350000, 84.750000};
+  double threshold = Fp.tHt;//threshs[Fp.used];
   if (verbose == 2)
-    printf("Thresh: %f\n",threshold);
+    printf("Amplitude: %g\tThresh: %f\n",source_pars.Amp,threshold);
   //double threshold = atof(argv[4]);
   int detected = 0;
   int total = 0;
@@ -1243,7 +1257,7 @@ s = culaInitialize();
       for (j = 0; j < Nplsr; j++)
 	{
 	  add_signal(&(pulsars[j]),&(tempo_psrs[j]),params,source_pars);
-	  pulsars[j].index += 1;
+	  pulsars[j].index = gsl_rng_uniform_int(r,pulsars[j].n_sample-1);;
 	}
 
       formBatsAll(tempo_psrs,Nplsr);
@@ -1253,7 +1267,7 @@ s = culaInitialize();
       initialize_pulsars_fromtempo(tempo_psrs,pulsars,Nplsr,&Ndim,&Ntot,&params,1);
 
       for (j = 0; j < Nplsr; j++)
-	    compute_C_matrix(&(pulsars[j]),&params);
+	compute_C_matrix(&(pulsars[j]),&params);
       Fp = compute_Fp(pulsars,&params,Nplsr);
       if (verbose)
 	printf("%f\t%g\n",Fp.tHt,threshold);
@@ -1312,6 +1326,15 @@ s = culaInitialize();
 	  
 	  for (j = 0; j < Nplsr; j++)
 	    create_noise_only(&(pulsars[j]),r);
+	  //Do i want to create a new C for analyzing the things?
+	  for (j = 0; j < Nplsr; j++)
+	    {
+	      //	      pulsars[j].index += 2;
+	      pulsars[j].index = gsl_rng_uniform_int(r,pulsars[j].n_sample-1);
+	      compute_C_matrix(&(pulsars[j]),&params);
+	    }
+
+
 	  tend = omp_get_wtime();
 	  if (verbose == 3)
 	    printf("create_noise \t%g\n",tend-tstart);
