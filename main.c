@@ -16,7 +16,7 @@
 #include <mpi.h>
 #endif
 
-#define verbose 2
+#define verbose 0
 #define NFFT 40
 #define N_SAMPLE_MAX 27000
 #define MAX_PSR 45
@@ -1240,9 +1240,32 @@ s = culaInitialize();
 #ifdef UPPER
   struct source source_pars;
   params.omega = 2.0*PI*atof(argv[2]);
+
+  //put zero source and iterate 5 times
+  source_pars.Amp = 0.0;
+  for (i = 0; i < 10; i++)
+    {
+      source_pars.fr = params.omega/(2.0*PI);
+      randomize_source(&source_pars,r);
+      for (j = 0; j < Nplsr; j++)
+	{
+	  add_signal(&(pulsars[j]),&(tempo_psrs[j]),params,source_pars);
+	  //pulsars[j].index = gsl_rng_uniform_int(r,pulsars[j].n_sample-1);;
+	}
+
+      formBatsAll(tempo_psrs,Nplsr);
+      formResiduals(tempo_psrs,Nplsr,0.0);
+      doFitAll(tempo_psrs,Nplsr,0);
+
+      initialize_pulsars_fromtempo(tempo_psrs,pulsars,Nplsr,&Ndim,&Ntot,&params,1);
+
+    }
+  for (j = 0; j < Nplsr; j++)
+    compute_C_matrix(&(pulsars[j]),&params);
+  Fp = compute_Fp(pulsars,&params,Nplsr);
+
   source_pars.Amp = 0.4*pow(10.0,atof(argv[3])); // factor of sqrt(5)/sqrt(2)/4
   //compute to find out how many pulsars we are using here to get detection threshold value
-  Fp = compute_Fp(pulsars,&params,Nplsr);
   //  double threshs[45] = { 0.000000, 14.700000, 17.600000, 20.100000, 22.350000, 24.450000, 26.500000, 28.400000, 30.300000, 32.100000, 33.900000, 35.650000, 37.350000, 39.000000, 40.650000, 42.300000, 43.900000, 45.500000, 47.100000, 48.650000, 50.200000, 51.750000, 53.250000, 54.800000, 56.300000, 57.750000, 59.250000, 60.700000, 62.200000, 63.650000, 65.100000, 66.550000, 67.950000, 69.400000, 70.800000, 72.250000, 73.650000, 75.050000, 76.450000, 77.850000, 79.200000, 80.600000, 82.000000, 83.350000, 84.750000};
   double threshold = Fp.tHt;//threshs[Fp.used];
   if (verbose == 2)
