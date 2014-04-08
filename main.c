@@ -16,12 +16,12 @@
 #include <mpi.h>
 #endif
 
-#define verbose 0
-#define NFFT 40
+#define verbose 4
+#define NFFT 30
 #define N_SAMPLE_MAX 27000
 #define MAX_PSR 45
 #define MAX_BE 30
-#define NF0 100
+#define NF0 50
 
 #include <mydefs.h>
 
@@ -188,148 +188,21 @@ void compute_Nwiggle(struct mypulsar * pulsar)
 void compute_H(struct mypulsar * psr, struct parameters * par)
 {
   int j;      //build up H matrix
+  //  printf("\tCompute H with %g\n",par->omega);
   for (j = 0; j < psr->N; j++)
     {
-      psr->H->data[0*psr->H->m + j] = sin(par->omega*psr->toa->data[j]);
-      psr->H->data[1*psr->H->m + j] = cos(par->omega*psr->toa->data[j]);
+      psr->H->data[0*(psr->H->m) + j] = sin(par->omega*(psr->toa->data[j]));
+      psr->H->data[1*(psr->H->m) + j] = cos(par->omega*(psr->toa->data[j]));
     }
   my_dgemm(CblasTrans,CblasNoTrans,1.0,psr->G,psr->H,0.0,psr->GH);
 
 }
 
-void initialize_pulsars(struct mypulsar * pulsars, char ** filenames, int Nplsr, int *Ndim, int *Ntot, struct parameters * par)
-{
-  int i,j,k;
-  FILE *infile;
-  double temp;
-  //initialize a struct for each pulsar
-  *Ndim = 0;
-  *Ntot = 0;
-  for (i = 0; i < Nplsr; i++)
-    {
-      infile = fopen(filenames[i],"r");
-      if (fscanf(infile,"%le\n%le\n",&(pulsars[i].raj),&(pulsars[i].dec)) != 0);
-      if (fscanf(infile,"%d\n",&(pulsars[i].N)) != 0);
-      pulsars[i].toa = my_vector_alloc(pulsars[i].N);
-      pulsars[i].sigma = (double *) malloc(pulsars[i].N * sizeof(double));
-      for (j = 0; j < pulsars[i].N; j++)
-	if (fscanf(infile,"%le\n",&(pulsars[i].toa->data[j])) == 0)
-	  fprintf(stderr,"Read error toa\n");
-      for (j = 0; j < pulsars[i].N; j++)
-	if (fscanf(infile,"%le\n",&(pulsars[i].sigma[j])) == 0)
-	  fprintf(stderr,"Read error sigma\n");
-      if (fscanf(infile,"%d %d %d %d\n",&(pulsars[i].N),&(pulsars[i].N_m),&(pulsars[i].n_be),&(pulsars[i].n_sample)) != 0);
-      pulsars[i].res = my_vector_alloc(pulsars[i].N);
-      pulsars[i].obsfreqs = my_vector_alloc(pulsars[i].N);
-      pulsars[i].backends = (int *) malloc(pulsars[i].N*sizeof(int));
-      for (j = 0; j < pulsars[i].N; j++)
-	if (fscanf(infile,"%le\n",&(pulsars[i].res->data[j])) == 0)
-	  fprintf(stderr,"Read error res\n");
-      for (j = 0; j < pulsars[i].N; j++)
-	if (fscanf(infile,"%le\n",&(pulsars[i].obsfreqs->data[j])) == 0)
-	  fprintf(stderr,"Read error res\n");
-      for (j = 0; j < pulsars[i].N; j++)
-	if (fscanf(infile,"%d\n",&(pulsars[i].backends[j])) == 0)
-	  fprintf(stderr,"Read error res\n");
-      //      pulsars[i].G = gsl_matrix_calloc(pulsars[i].N,pulsars[i].N_m);
-      //my_matrix_init(pulsars[i].G,pulsars[i].N,pulsars[i].N_m);
-      pulsars[i].G = my_matrix_alloc(pulsars[i].N,pulsars[i].N_m);
-      for (j = 0; j < pulsars[i].N; j++)
-	for (k = 0; k < pulsars[i].N_m; k++)
-	  {
-	    if (fscanf(infile,"%le\n",&temp) != 0)
-	      pulsars[i].G->data[k*pulsars[i].G->m+j] = temp;
-      //	      gsl_matrix_set(pulsars[i].G,j,k,temp);
-	    else
-	      {
-		printf("ERROR IN READING G MATRIX\n");
-	      }
-	  }
-      *Ndim += pulsars[i].N_m;
-      *Ntot += pulsars[i].N;
-      pulsars[i].CWN = my_matrix_alloc(pulsars[i].N,pulsars[i].N);
-      //pulsars[i].CWN = gsl_matrix_calloc(pulsars[i].N,pulsars[i].N); //initialize with 0s
-
-#ifdef DM
-      pulsars[i].phi_inv = my_matrix_alloc(2*NFFT,2*NFFT);
-      pulsars[i].F = my_matrix_alloc(pulsars[i].N,2*NFFT);
-      pulsars[i].GF = my_matrix_alloc(pulsars[i].N_m,2*NFFT);
-#else
-      pulsars[i].phi_inv = my_matrix_alloc(NFFT,NFFT);
-      pulsars[i].F = my_matrix_alloc(pulsars[i].N,NFFT);
-      pulsars[i].GF = my_matrix_alloc(pulsars[i].N_m,NFFT);
-#endif
-
-      pulsars[i].GNGinv =  my_matrix_alloc(pulsars[i].N_m,pulsars[i].N_m);
-      pulsars[i].H = my_matrix_alloc(pulsars[i].N,2);
-
-      pulsars[i].C = my_matrix_alloc(pulsars[i].N_m,pulsars[i].N_m);
-      pulsars[i].Cinv = my_matrix_alloc(pulsars[i].N_m,pulsars[i].N_m);
-      pulsars[i].L = my_matrix_alloc(pulsars[i].N_m,pulsars[i].N_m);
-      pulsars[i].GH = my_matrix_alloc(pulsars[i].N_m,2);
-
-      pulsars[i].Gres = my_vector_alloc(pulsars[i].N_m);
-      my_dgemv(CblasTrans,1.0,pulsars[i].G,pulsars[i].res,0.0,pulsars[i].Gres);
-      //      my_vector_print(pulsars[i].Gres);
-      compute_H(&(pulsars[i]),par);
-
-      fclose(infile);
-      //read in sampled data
-      int xdim = 4+2*pulsars[i].n_be+1;
-      pulsars[i].sample = my_matrix_alloc(xdim,pulsars[i].n_sample);
-      char infilename[100];
-      sprintf(infilename,"%s/chains_Noise/Noise_PlusMono_post_equal_weights.dat",pulsars[i].name);
-      infile = fopen(infilename,"r");
-      for (j = 0; j < pulsars[i].n_sample; j++)
-	for (k = 0; k < xdim; k++)
-	  if (fscanf(infile,"%le",&(pulsars[i].sample->data[j*xdim + k])) == 0)
-	    fprintf(stderr,"Read error sampling\n");
-      if (verbose == 2)
-	{
-	  printf("first sample line:\n");
-	  for (k = 0; k < xdim; k++)
-	    printf("%g\t",pulsars[i].sample->data[k]);
-	  printf("\n");
-	}
-
-      double tmin= 1.0E10;
-      double tmax = 0.0;
-      //  double temp;
-      int b;
-      for (b = 0; b < pulsars[i].N; b++)
-	{
-	  if ((pulsars[i].toa->data[b]) > tmax)
-	    tmax = pulsars[i].toa->data[b];
-	  if ((pulsars[i].toa->data[b]) < tmin)
-	    tmin = pulsars[i].toa->data[b];
-	}
-      temp = (tmax - tmin);
-      //temp = *tspan*1.306;                                                                                                                                                 
-      //  temp = *tspan;
-      //temp = *tspan*1.18;                                                                                                                                                  
-      double ffund = 1.0/(temp);
-      //set up frequency grid                                                                                                                                                
-      for (b = 0; b < (NFFT/2); b++)
-	{
-	  pulsars[i].freqs[b] = ffund*(b+1);
-	  //      printf("%d\t%e\n",i,par->freqs[i]);
-	}
-      pulsars[i].tspan = temp;
-      
-      //      compute_Nwiggle(&(pulsars[i]));
-
-    }
-
-
-  if (verbose)
-    printf("Ndim is %d\n",*Ndim);
-}
-
-void get_G_matrix(struct my_matrix * G, pulsar psr, struct mypulsar mypsr)
+void get_G_matrix(struct my_matrix * G, pulsar * psr, struct mypulsar mypsr)
 {
   int j,k;
-  double epoch = *(psr.param[param_pepoch].val);
-  int ndim = psr.nParam;
+  double epoch = *(psr->param[param_pepoch].val);
+  int ndim = psr->nParam;
   int ma = ndim;
   struct my_matrix * design;
   design = my_matrix_alloc(ma,mypsr.N);
@@ -337,7 +210,7 @@ void get_G_matrix(struct my_matrix * G, pulsar psr, struct mypulsar mypsr)
   designT = my_matrix_alloc(mypsr.N,ma);
   for (j = 0; j < mypsr.N; j++)
     {
-      FITfuncs(psr.obsn[j].bat - epoch,&(design->data[j*design->m]),ma,&psr,j,0);
+      FITfuncs(psr->obsn[j].bat - epoch,&(design->data[j*design->m]),ma,psr,j,0);
     }
   struct my_vector * singulars;
   struct my_matrix *U;
@@ -354,6 +227,7 @@ void get_G_matrix(struct my_matrix * G, pulsar psr, struct mypulsar mypsr)
     my_matrix_free(design);
     my_matrix_free(U);
     my_matrix_free(designT);
+    my_vector_free(singulars);
 
 }
 
@@ -361,7 +235,7 @@ void initialize_pulsars_fromtempo(pulsar * tempo_psrs, struct mypulsar * pulsars
 {
   FILE *infile;
   int i,j,k,l;
-  if (verbose)
+  if (verbose == 2)
     printf("initializing from tempo\n");
   double temp;
   //initialize a struct for each pulsar
@@ -369,7 +243,7 @@ void initialize_pulsars_fromtempo(pulsar * tempo_psrs, struct mypulsar * pulsars
   *Ntot = 0;
   for (i = 0; i < Nplsr; i++)
     {
-      pulsar psr = tempo_psrs[i];
+      pulsar * psr = &(tempo_psrs[i]);
       char backends[MAX_BE][MAX_FLAG_LEN];
       int bid = 0;
       if (only_res == 0) //do all init
@@ -378,25 +252,29 @@ void initialize_pulsars_fromtempo(pulsar * tempo_psrs, struct mypulsar * pulsars
 	    printf("Initializing for the first time pulsar %d\n",i);
       //dereference tempo pulsar to save writing
 	  pulsars[i].n_be=0;
-	  pulsars[i].raj = atof(psr.rajStrPost);
-	  pulsars[i].dec = atof(psr.decjStrPost);
-	  pulsars[i].N = psr.nobs;
+	  pulsars[i].raj = atof(psr->rajStrPost);
+	  pulsars[i].dec = atof(psr->decjStrPost);
+	  pulsars[i].N = psr->nobs;
 
 	  pulsars[i].toa = my_vector_alloc(pulsars[i].N);
 	  pulsars[i].sigma = (double *) malloc(pulsars[i].N * sizeof(double));
-	  pulsars[i].oldbat = (double *) malloc(pulsars[i].N * sizeof(double));
+//	  pulsars[i].oldbat = (double *) malloc(pulsars[i].N * sizeof(double));
+//	  pulsars[i].oldbbat = (double *) malloc(pulsars[i].N * sizeof(double));
 	}
       
-	  for (j = 0; j < pulsars[i].N; j++)
-	    {
-	      pulsars[i].toa->data[j] = psr.obsn[j].bat*86400.0;
-	      if (only_res == 0)
-		pulsars[i].oldbat[j] = psr.obsn[j].sat*86400.0;
-	    }
+      for (j = 0; j < pulsars[i].N; j++)
+	{
+	  pulsars[i].toa->data[j] = psr->obsn[j].bat*86400.0;
+//	      if (only_res == 0)
+//		{
+//		  pulsars[i].oldbat[j] = psr->obsn[j].sat*86400.0;
+//		  pulsars[i].oldbbat[j] = psr->obsn[j].sat*86400.0;
+//		}
+	}
 	  if (only_res == 0)
 	    {
 	      for (j = 0; j < pulsars[i].N; j++)
-		pulsars[i].sigma[j] = psr.obsn[j].toaErr * 1e-6;
+		pulsars[i].sigma[j] = psr->obsn[j].toaErr * 1e-6;
 	  //      pulsars[i].N_m = 
 	  //if (fscanf(infile,"%d %d %d %d\n",&(pulsars[i].N),&(pulsars[i].N_m),&(pulsars[i].n_be),&(pulsars[i].n_sample)) != 0);
 	      pulsars[i].res = my_vector_alloc(pulsars[i].N);
@@ -406,14 +284,14 @@ void initialize_pulsars_fromtempo(pulsar * tempo_psrs, struct mypulsar * pulsars
       //Do this part always
       for (j = 0; j < pulsars[i].N; j++)
 	{
-	  pulsars[i].res->data[j] = psr.obsn[j].residual;
+	  pulsars[i].res->data[j] = psr->obsn[j].residual;
 	  if (only_res == 0)
 	    {
-	      pulsars[i].obsfreqs->data[j] = psr.obsn[j].freq;
+	      pulsars[i].obsfreqs->data[j] = psr->obsn[j].freq;
 	      l = 0;
 	      //	  if (verbose)
-	      //	    printf("Found %d flags\n",psr.obsn[j].nFlags);
-	      while ((strcmp(psr.obsn[j].flagID[l],"-sys") != 0) && (l < psr.obsn[j].nFlags))
+	      //	    printf("Found %d flags\n",psr->obsn[j].nFlags);
+	      while ((strcmp(psr->obsn[j].flagID[l],"-sys") != 0) && (l < psr->obsn[j].nFlags))
 		{
 		  l++;
 		}
@@ -421,18 +299,18 @@ void initialize_pulsars_fromtempo(pulsar * tempo_psrs, struct mypulsar * pulsars
 	      for (k = 0; k < pulsars[i].n_be; k++)
 		{
 		  //check if already sys flag exists in backends
-		  if (strcmp(psr.obsn[j].flagVal[l],backends[k]) == 0)
+		  if (strcmp(psr->obsn[j].flagVal[l],backends[k]) == 0)
 		    bid = k;
 		}
 	      if (bid == pulsars[i].n_be)
 		{
 		  if (verbose)
-		    printf("Found new backend\t%s\n",psr.obsn[j].flagVal[l]);
-		  strcpy(backends[pulsars[i].n_be],psr.obsn[j].flagVal[l]);
+		    printf("Found new backend\t%s\n",psr->obsn[j].flagVal[l]);
+		  strcpy(backends[pulsars[i].n_be],psr->obsn[j].flagVal[l]);
 		  pulsars[i].n_be++;
 		}
 	      pulsars[i].backends[j] = bid;
-	      //	  pulsars[i].backends[j] = psr.obsn[j].residual;
+	      //	  pulsars[i].backends[j] = psr->obsn[j].residual;
 	    }
 	}
       //compute design matrix here and sort backends
@@ -460,13 +338,11 @@ void initialize_pulsars_fromtempo(pulsar * tempo_psrs, struct mypulsar * pulsars
 
 	  free(sorted);
 
-	  int ma = psr.nParam;
+	  int ma = psr->nParam;
 
 	  pulsars[i].N_m = pulsars[i].N - ma;
 	  pulsars[i].G = my_matrix_alloc(pulsars[i].N,pulsars[i].N_m);
 	  
-	  //Maybe i need to reobtain the desing matrix all the time, maybe not
-	  get_G_matrix(pulsars[i].G, psr, pulsars[i]);
 
 	  *Ndim += pulsars[i].N_m;
 	  *Ntot += pulsars[i].N;
@@ -494,11 +370,14 @@ void initialize_pulsars_fromtempo(pulsar * tempo_psrs, struct mypulsar * pulsars
 	  pulsars[i].Gres = my_vector_alloc(pulsars[i].N_m);
 	} //end if only_res == 0
       //Do this part always
+	  //Maybe i need to reobtain the desing matrix all the time, maybe not
+      get_G_matrix(pulsars[i].G, psr, pulsars[i]);
+
       my_dgemv(CblasTrans,1.0,pulsars[i].G,pulsars[i].res,0.0,pulsars[i].Gres);
       //      my_vector_print(pulsars[i].Gres);
       if (only_res == 0)
 	{
-	  compute_H(&(pulsars[i]),par);
+      compute_H(&(pulsars[i]),par);
 
 #ifdef REDNOISE
       //read in sampled data
@@ -563,7 +442,7 @@ void initialize_pulsars_fromtempo(pulsar * tempo_psrs, struct mypulsar * pulsars
 
     }
 
-  if (verbose)
+  if (verbose == 2)
     printf("Ndim is %d\n",*Ndim);
 }
 
@@ -751,7 +630,7 @@ void randomize_source(struct source * p, gsl_rng * r)
   double normMc = ( pow(McRange[1],(beta+1.0)) - pow(McRange[0],(beta+1.0)))/(beta+1.0);
   double AA = gsl_rng_uniform(r)*normMc;
   double Mc = pow(( pow(McRange[0],(beta+1.0)) + (beta+1.0)*AA ),(1.0/(beta + 1.0)));
-  double DL = 2.0*pow((Mc*Msun),(5./3.)) *pow((PI*p->fr),(2./3.))/p->Amp;
+  double DL = 2.0*pow((Mc*Msun),(5./3.)) *pow((PI*(p->fr)),(2./3.))/p->Amp;
   double th_s = acos(2.0*(gsl_rng_uniform(r)-0.5));
   double ph_s = gsl_rng_uniform(r)*2.0*PI;
   double psi = gsl_rng_uniform(r)*PI;
@@ -769,61 +648,69 @@ void randomize_source(struct source * p, gsl_rng * r)
   //  p->fr = 2.0e-7;
 }
 
-void add_signal(struct mypulsar *psr, pulsar * t_psr, struct parameters params, struct source source_pars)
+void add_signal(struct mypulsar *psr, pulsar * t_psr, struct parameters params, struct source source_pars, int Nplsr)
 {
-  double theta_a = 0.5*PI - psr->dec;
-  double phi_a = psr->raj;
-  double L_a = psr->dist; //distance to the pulsar
-  
-  double theta_s = source_pars.theta_s;
-  double phi_s = source_pars.phi_s;
-  double Mc = source_pars.Mc;
-  double fr = source_pars.fr;
-  //double fr = params.omega/(2.0*PI);
-  
-  double psi = source_pars.psi;
-  double phi0 = source_pars.phi0;
-  double Amp = source_pars.Amp;
-  double iota = source_pars.iota;
+  int p;
+  for (p = 0; p < Nplsr; p++)
+    {
 
-  double om_0 = 2.*PI*fr;
-   
-  double a1 = Amp*( (1.0 + cos(iota)*cos(iota))*cos(psi)*cos(phi0) - 2.0*cos(iota)*sin(psi)*sin(phi0) );
-  double a2 = Amp*( (1.0 + cos(iota)*cos(iota))*sin(psi)*cos(phi0) + 2.0*cos(iota)*cos(psi)*sin(phi0) );
-  double a3 = Amp*( (1.0 + cos(iota)*cos(iota))*cos(psi)*sin(phi0) + 2.0*cos(iota)*sin(psi)*cos(phi0) );
-  double a4 = Amp*( (1.0 + cos(iota)*cos(iota))*sin(psi)*sin(phi0) - 2.0*cos(iota)*cos(psi)*cos(phi0) );
-   
-  double k[3] = {sin(theta_s)*cos(phi_s), sin(theta_s)*sin(phi_s), cos(theta_s)};
-  double n[3] = {sin(theta_a)*cos(phi_a), sin(theta_a)*sin(phi_a), cos(theta_a)};
-  double Lp = L_a*1.e3*pc_sec;
-  double Mc_sec = Mc*Msun;
+  longdouble theta_a = 0.5*PI - psr[p].dec;
+  longdouble phi_a = psr[p].raj;
+  longdouble L_a = psr[p].dist; //distance to the pulsar
   
-  double tau = Lp*(1. + k[0]*n[0] + k[1]*n[1] + k[2]*n[2]);
-  double om_orb = 0.5*om_0;
-  double om_p =  om_0*pow((1.0 + 256./5.*pow(Mc_sec,(5./3.))*pow(om_orb,(8./3.))*tau),(-3./8.)) ;
-  double phi_a_phase = -om_0*tau;
+  longdouble theta_s = source_pars.theta_s;
+  longdouble phi_s = source_pars.phi_s;
+  longdouble Mc = source_pars.Mc;
+  longdouble fr = source_pars.fr;
+  //longdouble fr = params.omega/(2.0*PI);
+  
+  longdouble psi = source_pars.psi;
+  longdouble phi0 = source_pars.phi0;
+  longdouble Amp = source_pars.Amp;
+  longdouble iota = source_pars.iota;
+
+  longdouble om_0 = 2.*PI*fr;
+   
+  longdouble a1 = Amp*( (1.0 + cos(iota)*cos(iota))*cos(psi)*cos(phi0) - 2.0*cos(iota)*sin(psi)*sin(phi0) );
+  longdouble a2 = Amp*( (1.0 + cos(iota)*cos(iota))*sin(psi)*cos(phi0) + 2.0*cos(iota)*cos(psi)*sin(phi0) );
+  longdouble a3 = Amp*( (1.0 + cos(iota)*cos(iota))*cos(psi)*sin(phi0) + 2.0*cos(iota)*sin(psi)*cos(phi0) );
+  longdouble a4 = Amp*( (1.0 + cos(iota)*cos(iota))*sin(psi)*sin(phi0) - 2.0*cos(iota)*cos(psi)*cos(phi0) );
+   
+  longdouble k[3] = {sin(theta_s)*cos(phi_s), sin(theta_s)*sin(phi_s), cos(theta_s)};
+  longdouble n[3] = {sin(theta_a)*cos(phi_a), sin(theta_a)*sin(phi_a), cos(theta_a)};
+  longdouble Lp = L_a*1.e3*pc_sec;
+  longdouble Mc_sec = Mc*Msun;
+  
+  longdouble tau = Lp*(1. + k[0]*n[0] + k[1]*n[1] + k[2]*n[2]);
+  longdouble om_orb = 0.5*om_0;
+  longdouble om_p =  om_0*pow((1.0 + 256./5.*pow(Mc_sec,(5./3.))*pow(om_orb,(8./3.))*tau),(-3./8.)) ;
+  longdouble phi_a_phase = -om_0*tau;
 
   struct geo_par geo;
   geo = ComputeFs(theta_s, phi_s, theta_a, phi_a);
 
   int i;
-  double phase_e,phase_p,sn,cs,sn_p,cs_p,h;
-  double denom_2 = (pow(om_p,(1./3.))*pow(om_0,(2./3.)));
-  for (i = 0; i < t_psr->nobs; i++)
+  longdouble phase_e,phase_p,sn,cs,sn_p,cs_p,h;
+  longdouble denom_2 = (pow(om_p,(1./3.))*pow(om_0,(2./3.)));
+  //  printf("\tCompute signal with %g\n",(double) om_0);
+
+  for (i = 0; i < t_psr[p].nobs; i++)
     {
-      phase_e = om_0*psr->oldbat[i];
-      phase_p = om_p*psr->oldbat[i] + phi_a_phase;
+      phase_e = om_0*(t_psr[p].obsn[i].bat);
+      phase_p = om_p*(t_psr[p].obsn[i].bat) + phi_a_phase;
 
       sn = sin(phase_e)/(om_0);
       cs = cos(phase_e)/(om_0);
       sn_p = sin(phase_p)/denom_2;
       cs_p = cos(phase_p)/denom_2;
+      sn_p = 0.0;
+      cs_p = 0.0;
 
-     
       //add signal to the residual
-      t_psr->obsn[i].sat = (psr->oldbat[i] + (a1*geo.Fac + a2*geo.Fas)*(sn_p - sn) + (a3*geo.Fac + a4*geo.Fas)*(cs_p -cs))/86400.0;
+      t_psr[p].obsn[i].bat += ((a1*geo.Fac + a2*geo.Fas)*(sn_p - sn) + (a3*geo.Fac + a4*geo.Fas)*(cs_p -cs))/86400.0;
+      //      t_psr[p].obsn[i].bbat += ((a1*geo.Fac + a2*geo.Fas)*(sn_p - sn) + (a3*geo.Fac + a4*geo.Fas)*(cs_p -cs))/86400.0;
     }
-
+    }
 }
 #endif
 
@@ -1127,7 +1014,7 @@ s = culaInitialize();
 #ifdef UPPER
       strcpy(pulsarname[i],argv[i+4]);
       sprintf(filenames[i],"%s/%s_mod.tim",pulsarname[i],pulsarname[i]);
-      sprintf(parfilenames[i],"%s/%s.par",pulsarname[i],pulsarname[i]);
+      sprintf(parfilenames[i],"SteveAllParTim_03-04-2014/%s.par",pulsarname[i],pulsarname[i]);
 #else
 //      strcpy(filenames[i],argv[i+2]);
 //      strcpy(parfilenames[i],argv[i+2+Nplsr]);
@@ -1142,21 +1029,22 @@ s = culaInitialize();
   readParfile(tempo_psrs,parfilenames,filenames,Nplsr);
   readTimfile(tempo_psrs,filenames,Nplsr);
   preProcess(tempo_psrs,Nplsr,argc,argv);
-  formBatsAll(tempo_psrs,Nplsr);
-  formResiduals(tempo_psrs,Nplsr,0.0);
-  double globalParameter;
-  double tstart = omp_get_wtime();
-  
-  doFitAll(tempo_psrs,Nplsr,0);
 
-  double tend = omp_get_wtime();
-  printf("%g\n",tend-tstart);
+  for (i = 0; i < 2; i++)
+    {
+      formBatsAll(tempo_psrs,Nplsr);
+      formResiduals(tempo_psrs,Nplsr,0);
+
+      if (i == 0)
+	doFitAll(tempo_psrs,Nplsr,0);
+    }
+
 //  for (i = 0; i < tempo_psrs[0].nobs; i++)
 //    {
 //      printf("res\t%lg\n",(double) tempo_psrs[0].obsn[i].residual);
 //    }
 //
-  pulsars = (struct mypulsar *) malloc(Nplsr * sizeof(struct mypulsar));
+  pulsars = (struct mypulsar *) malloc(MAX_PSR * sizeof(struct mypulsar));
 
   for (i = 0; i < Nplsr; i++)
     {
@@ -1181,22 +1069,22 @@ s = culaInitialize();
   r = gsl_rng_alloc (gsl_rng_mt19937);
   gsl_rng_set(r,time(NULL));
   /* ------------------------- */
-  tstart = omp_get_wtime();
+
   initialize_pulsars_fromtempo(tempo_psrs,pulsars,Nplsr,&Ndim,&Ntot,&params,0);
-  tend = omp_get_wtime();
+
   //  printf("init took %f sec\n",tend-tstart);
 
   //Ntot = total number of residuals.pu Ndim = reduced number of residuals
   /* ------------------------- */
   int changed = 1;
 
-  params.omega = 3.0e-7;
+  //  params.omega = 3.0e-7;
   for (i = 0; i < Nplsr; i++)
     {
-#ifdef REDNOISE // values for data challenge 3 open
-      pulsars[i].rA = pow(10.0,-14.35);
-      pulsars[i].rgamma = 1.52;
-#endif
+//#ifdef REDNOISE // values for data challenge 3 open
+//      pulsars[i].rA = pow(10.0,-14.35);
+//      pulsars[i].rgamma = 1.52;
+//#endif
       pulsars[i].index = pulsars[i].n_sample-NF0-5;
       //      pulsars[i].index = 0;
       compute_C_matrix(&(pulsars[i]),&params);
@@ -1209,8 +1097,8 @@ s = culaInitialize();
 
   struct Fp Fp;
 
-  Fp = compute_Fp(pulsars,&params,Nplsr);
-  printf("#\t% 6.4e% 6.4e\n",Fp.tCt,Fp.tHt);
+  //  Fp = compute_Fp(pulsars,&params,Nplsr);
+  //printf("#\t% 6.4e% 6.4e\n",Fp.tCt,Fp.tHt);
   //find longest tspan for min freq
   params.tspan = 0.0;
   for (i = 0; i < Nplsr; i++)
@@ -1243,28 +1131,16 @@ s = culaInitialize();
 
   //put zero source and iterate 5 times
   source_pars.Amp = 0.0;
-  for (i = 0; i < 10; i++)
-    {
-      source_pars.fr = params.omega/(2.0*PI);
-      randomize_source(&source_pars,r);
-      for (j = 0; j < Nplsr; j++)
-	{
-	  add_signal(&(pulsars[j]),&(tempo_psrs[j]),params,source_pars);
-	  //pulsars[j].index = gsl_rng_uniform_int(r,pulsars[j].n_sample-1);;
-	}
-
-      formBatsAll(tempo_psrs,Nplsr);
-      formResiduals(tempo_psrs,Nplsr,0.0);
-      doFitAll(tempo_psrs,Nplsr,0);
-
-      initialize_pulsars_fromtempo(tempo_psrs,pulsars,Nplsr,&Ndim,&Ntot,&params,1);
-
-    }
+//
+//      initialize_pulsars_fromtempo(tempo_psrs,pulsars,Nplsr,&Ndim,&Ntot,&params,1);
+//
+//    }
   for (j = 0; j < Nplsr; j++)
     compute_C_matrix(&(pulsars[j]),&params);
   Fp = compute_Fp(pulsars,&params,Nplsr);
 
   source_pars.Amp = 0.4*pow(10.0,atof(argv[3])); // factor of sqrt(5)/sqrt(2)/4
+  source_pars.fr = params.omega/(2.0*PI);
   //compute to find out how many pulsars we are using here to get detection threshold value
   //  double threshs[45] = { 0.000000, 14.700000, 17.600000, 20.100000, 22.350000, 24.450000, 26.500000, 28.400000, 30.300000, 32.100000, 33.900000, 35.650000, 37.350000, 39.000000, 40.650000, 42.300000, 43.900000, 45.500000, 47.100000, 48.650000, 50.200000, 51.750000, 53.250000, 54.800000, 56.300000, 57.750000, 59.250000, 60.700000, 62.200000, 63.650000, 65.100000, 66.550000, 67.950000, 69.400000, 70.800000, 72.250000, 73.650000, 75.050000, 76.450000, 77.850000, 79.200000, 80.600000, 82.000000, 83.350000, 84.750000};
   double threshold = Fp.tHt;//threshs[Fp.used];
@@ -1273,36 +1149,46 @@ s = culaInitialize();
   //double threshold = atof(argv[4]);
   int detected = 0;
   int total = 0;
+
   for (i = 0; i < NF0; i++)
     {
-      source_pars.fr = params.omega/(2.0*PI);
       randomize_source(&source_pars,r);
+
       for (j = 0; j < Nplsr; j++)
 	{
-	  add_signal(&(pulsars[j]),&(tempo_psrs[j]),params,source_pars);
 	  pulsars[j].index = gsl_rng_uniform_int(r,pulsars[j].n_sample-1);;
 	}
 
-      formBatsAll(tempo_psrs,Nplsr);
-      formResiduals(tempo_psrs,Nplsr,0.0);
-      doFitAll(tempo_psrs,Nplsr,0);
+
+      for (j = 0; j < 1; j++)
+	{
+
+//      printf("preformBats\t%d\t%e\t%e\n",i,tempo_psrs[0].obsn[0].bat,tempo_psrs[0].obsn[1].bat);
+	  formBatsAll(tempo_psrs,Nplsr);
+	  //	  if (j == 0)
+	  add_signal(pulsars,tempo_psrs,params,source_pars,Nplsr);
+      //      printf("Bats\t%d\t%e\n",i,tempo_psrs[0].obsn[4].bat);
+	  
+	  formResiduals(tempo_psrs,Nplsr,0);
+	  //	  if (j == 0)
+	  //  doFitAll(tempo_psrs,Nplsr,0);
+	}
 
       initialize_pulsars_fromtempo(tempo_psrs,pulsars,Nplsr,&Ndim,&Ntot,&params,1);
 
       for (j = 0; j < Nplsr; j++)
 	compute_C_matrix(&(pulsars[j]),&params);
       Fp = compute_Fp(pulsars,&params,Nplsr);
-      if (verbose)
+      if (verbose == 4)
 	printf("%f\t%g\n",Fp.tHt,threshold);
       if (Fp.tHt > threshold)
 	detected++;
       total++;
-      tend = omp_get_wtime();
-      if (verbose == 3)
-	printf("compute_Fp \t%g\n",tend-tstart);
+
       //  fprintf(outfile,"% 6.4e\t% 6.4e\n",Fp.tCt,Fp.tHt);
       //printf("% 6.4e\n",Fp.tHt);
     }
+
   double fdetected = (double) detected / total;
   printf("DETECTED\t%f\n",fdetected);
 

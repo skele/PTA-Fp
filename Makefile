@@ -1,6 +1,6 @@
 ## Makefile                                                                                                                                                             
 CC=gcc
-CFLAGS= -O3# -pthread
+CFLAGS= -g#-O3# -pthread
  
 HOST:=$(shell hostname | cut -d . -f 1)
 
