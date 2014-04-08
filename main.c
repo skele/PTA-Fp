@@ -21,7 +21,8 @@
 #define N_SAMPLE_MAX 27000
 #define MAX_PSR 45
 #define MAX_BE 30
-#define NF0 50
+#define NF0 100
+//#define PRINTRES
 
 #include <mydefs.h>
 
@@ -696,19 +697,21 @@ void add_signal(struct mypulsar *psr, pulsar * t_psr, struct parameters params, 
 
   for (i = 0; i < t_psr[p].nobs; i++)
     {
-      phase_e = om_0*(t_psr[p].obsn[i].bat);
-      phase_p = om_p*(t_psr[p].obsn[i].bat) + phi_a_phase;
+      phase_e = om_0*(t_psr[p].obsn[i].bat*86400.0);
+      phase_p = om_p*(t_psr[p].obsn[i].bat*86400.0) + phi_a_phase;
 
       sn = sin(phase_e)/(om_0);
       cs = cos(phase_e)/(om_0);
       sn_p = sin(phase_p)/denom_2;
       cs_p = cos(phase_p)/denom_2;
-      sn_p = 0.0;
-      cs_p = 0.0;
+
+#ifdef PRINTRES
+      printf("BAT\t%e\t%e\n",(double)t_psr[p].obsn[i].bat,(double)((a1*geo.Fac + a2*geo.Fas)*(sn_p - sn) + (a3*geo.Fac + a4*geo.Fas)*(cs_p -cs))/86400.0);
+#endif
 
       //add signal to the residual
       t_psr[p].obsn[i].bat += ((a1*geo.Fac + a2*geo.Fas)*(sn_p - sn) + (a3*geo.Fac + a4*geo.Fas)*(cs_p -cs))/86400.0;
-      //      t_psr[p].obsn[i].bbat += ((a1*geo.Fac + a2*geo.Fas)*(sn_p - sn) + (a3*geo.Fac + a4*geo.Fas)*(cs_p -cs))/86400.0;
+      t_psr[p].obsn[i].bbat += ((a1*geo.Fac + a2*geo.Fas)*(sn_p - sn) + (a3*geo.Fac + a4*geo.Fas)*(cs_p -cs))/86400.0;
     }
     }
 }
@@ -1173,8 +1176,17 @@ s = culaInitialize();
 	  //	  if (j == 0)
 	  //  doFitAll(tempo_psrs,Nplsr,0);
 	}
-
       initialize_pulsars_fromtempo(tempo_psrs,pulsars,Nplsr,&Ndim,&Ntot,&params,1);
+
+#ifdef PRINTRES
+      if (i == 0)
+	for (j = 0; j < pulsars[i].N; j++)
+	  {
+	    printf("RES\t%e\t%e\n",(double) pulsars[i].toa->data[j], (double) pulsars[i].res->data[j]);
+	  }
+#endif
+
+
 
       for (j = 0; j < Nplsr; j++)
 	compute_C_matrix(&(pulsars[j]),&params);

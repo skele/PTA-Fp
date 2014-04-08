@@ -27,10 +27,10 @@ for i in range(nresults):
     for line in infile:
         fields = line.split()
         #print fields
-        if fields[2] == "FINISHED":
+        if fields[1] == "0":
             results_freqs.append(freqs[i])
             results_amps.append(float(fields[0]))
 fig = plt.figure()
 ax = fig.add_subplot(111)
-ax.plot(results_freqs,results_amps)
+ax.plot(results_freqs,results_amps,ls='',marker='o')
 plt.show()
