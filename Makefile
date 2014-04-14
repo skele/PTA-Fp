@@ -9,6 +9,11 @@ INC=-I. -I$(TEMPO2)/include -L$(TEMPO2)/lib -ltempo2 -lblas -llapack -lgsl -lgsl
 INCCULA=-I$(TEMPO2)/include -I. -I/usr/local/cula/include -L/home/pbrem/Downloads/ATLAS/lib/Linux_UNKNOWNSSE2_4 -L/usr/local/cuda-5.5/lib -L/usr/local/cula/lib -lcula_lapack -lcublas -lgsl -L$(TEMPO2)/lib -ltempo2 -lcudart  -lcublas -lcula_lapack -lgsl -lgslcblas -lm -lgomp
 endif
  
+ifeq ($(HOST), sthelens)
+INC=-I$(TEMPO2)/include -I. -L$(TEMPO2)/lib -ltempo2 -lblas -llapack -lgsl -lgslcblas -lm -lgomp
+INCCULA=-I$(TEMPO2)/include -I. -I/home/pbrem/cula/include -L/home/pbrem/cula/lib64 -L$(TEMPO2)/lib -ltempo2 -lcudart  -lcublas -lcula_lapack -lgsl -lgslcblas -lm -lgomp
+endif
+ 
 ifeq ($(HOST), pinatubo)
 INC=-I$(TEMPO2)/include -I. -L$(TEMPO2)/lib -ltempo2 -lblas -llapack -lgsl -lgslcblas -lm -lgomp
 INCCULA=-I$(TEMPO2)/include -I. -I/home/pbrem/cula/include -L/home/pbrem/cula/lib64 -L$(TEMPO2)/lib -ltempo2 -lcudart  -lcublas -lcula_lapack -lgsl -lgslcblas -lm -lgomp
@@ -22,13 +27,15 @@ endif
 all: main.c
 	$(CC) $(CFLAGS) -o pca $^ $(INC)
 upper: main.c
-	$(CC) $(CFLAGS) -o pca_upper $^ $(INC) -lblas -DUPPER
+	$(CC) $(CFLAGS) -o pca_upper $^ $(INC) -DUPPER
 uppercula: main.c
 	$(CC) $(CFLAGS) -o pca_upper $^ $(INCCULA) -lblas -DUPPER -DCULA
 f0: main.c
-	$(CC) $(CFLAGS) -o pca_F0 $^ $(INC) -lblas -DF0
+	$(CC) $(CFLAGS) -o pca_F0 $^ $(INC) -DF0
 f0cula: main.c
 	$(CC) $(CFLAGS) -o pca_F0 $^ $(INCCULA) -lblas -DF0 -DCULA
+gencula: main.c
+	$(CC) $(CFLAGS) -o pca_gen $^ $(INCCULA) -lblas -DF0 -DCULA -DGENNOISE
 fp: main.c
 	$(CC) $(CFLAGS) -o pca_Fp $^ $(INC) -lblas
 fpcula: main.c

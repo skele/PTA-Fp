@@ -16,12 +16,12 @@
 #include <mpi.h>
 #endif
 
-#define verbose 4
-#define NFFT 30
-#define N_SAMPLE_MAX 27000
+#define verbose 0
+#define NFFT 800
+#define N_SAMPLE_MAX 28000
 #define MAX_PSR 45
 #define MAX_BE 30
-#define NF0 100
+#define NF0 1000
 //#define PRINTRES
 
 #include <mydefs.h>
@@ -225,10 +225,10 @@ void get_G_matrix(struct my_matrix * G, pulsar * psr, struct mypulsar mypsr)
   //copy last N_m columns
   memcpy(G->data,&(U->data[ma*U->m]),mypsr.N_m*mypsr.N*sizeof(double));
 
-    my_matrix_free(design);
-    my_matrix_free(U);
-    my_matrix_free(designT);
-    my_vector_free(singulars);
+  my_matrix_free(design);
+  my_matrix_free(U);
+  my_matrix_free(designT);
+  my_vector_free(singulars);
 
 }
 
@@ -242,11 +242,15 @@ void initialize_pulsars_fromtempo(pulsar * tempo_psrs, struct mypulsar * pulsars
   //initialize a struct for each pulsar
   *Ndim = 0;
   *Ntot = 0;
+  int globsize = 0;
   for (i = 0; i < Nplsr; i++)
     {
       pulsar * psr = &(tempo_psrs[i]);
       char backends[MAX_BE][MAX_FLAG_LEN];
       int bid = 0;
+      int totalsize = 0;
+
+
       if (only_res == 0) //do all init
 	{
 	  if (verbose == 3)
@@ -257,7 +261,7 @@ void initialize_pulsars_fromtempo(pulsar * tempo_psrs, struct mypulsar * pulsars
 	  pulsars[i].dec = atof(psr->decjStrPost);
 	  pulsars[i].N = psr->nobs;
 
-	  pulsars[i].toa = my_vector_alloc(pulsars[i].N);
+	  pulsars[i].toa = my_vector_alloc_count(&totalsize,pulsars[i].N);
 	  pulsars[i].sigma = (double *) malloc(pulsars[i].N * sizeof(double));
 //	  pulsars[i].oldbat = (double *) malloc(pulsars[i].N * sizeof(double));
 //	  pulsars[i].oldbbat = (double *) malloc(pulsars[i].N * sizeof(double));
@@ -278,8 +282,8 @@ void initialize_pulsars_fromtempo(pulsar * tempo_psrs, struct mypulsar * pulsars
 		pulsars[i].sigma[j] = psr->obsn[j].toaErr * 1e-6;
 	  //      pulsars[i].N_m = 
 	  //if (fscanf(infile,"%d %d %d %d\n",&(pulsars[i].N),&(pulsars[i].N_m),&(pulsars[i].n_be),&(pulsars[i].n_sample)) != 0);
-	      pulsars[i].res = my_vector_alloc(pulsars[i].N);
-	      pulsars[i].obsfreqs = my_vector_alloc(pulsars[i].N);
+	      pulsars[i].res = my_vector_alloc_count(&totalsize,pulsars[i].N);
+	      pulsars[i].obsfreqs = my_vector_alloc_count(&totalsize,pulsars[i].N);
 	      pulsars[i].backends = (int *) malloc(pulsars[i].N*sizeof(int));
 	    }
       //Do this part always
@@ -342,33 +346,33 @@ void initialize_pulsars_fromtempo(pulsar * tempo_psrs, struct mypulsar * pulsars
 	  int ma = psr->nParam;
 
 	  pulsars[i].N_m = pulsars[i].N - ma;
-	  pulsars[i].G = my_matrix_alloc(pulsars[i].N,pulsars[i].N_m);
+	  pulsars[i].G = my_matrix_alloc_count(&totalsize,pulsars[i].N,pulsars[i].N_m);
 	  
 
 	  *Ndim += pulsars[i].N_m;
 	  *Ntot += pulsars[i].N;
-	  pulsars[i].CWN = my_matrix_alloc(pulsars[i].N,pulsars[i].N);
+	  pulsars[i].CWN = my_matrix_alloc_count(&totalsize,pulsars[i].N,pulsars[i].N);
       //pulsars[i].CWN = gsl_matrix_calloc(pulsars[i].N,pulsars[i].N); //initialize with 0s
 
 #ifdef DM
-	  pulsars[i].phi_inv = my_matrix_alloc(2*NFFT,2*NFFT);
-	  pulsars[i].F = my_matrix_alloc(pulsars[i].N,2*NFFT);
-	  pulsars[i].GF = my_matrix_alloc(pulsars[i].N_m,2*NFFT);
+	  pulsars[i].phi_inv = my_vector_alloc_count(&totalsize,2*NFFT);
+	  pulsars[i].F = my_matrix_alloc_count(&totalsize,pulsars[i].N,2*NFFT);
+	  pulsars[i].GF = my_matrix_alloc_count(&totalsize,pulsars[i].N_m,2*NFFT);
 #else
-	  pulsars[i].phi_inv = my_matrix_alloc(NFFT,NFFT);
-	  pulsars[i].F = my_matrix_alloc(pulsars[i].N,NFFT);
-	  pulsars[i].GF = my_matrix_alloc(pulsars[i].N_m,NFFT);
+	  pulsars[i].phi_inv = my_vector_alloc_count(&totalsize,NFFT);
+	  pulsars[i].F = my_matrix_alloc_count(&totalsize,pulsars[i].N,NFFT);
+	  pulsars[i].GF = my_matrix_alloc_count(&totalsize,pulsars[i].N_m,NFFT);
 #endif
 	  
-	  pulsars[i].GNGinv =  my_matrix_alloc(pulsars[i].N_m,pulsars[i].N_m);
-	  pulsars[i].H = my_matrix_alloc(pulsars[i].N,2);
+	  pulsars[i].GNGinv =  my_matrix_alloc_count(&totalsize,pulsars[i].N_m,pulsars[i].N_m);
+	  pulsars[i].H = my_matrix_alloc_count(&totalsize,pulsars[i].N,2);
 	  
-	  pulsars[i].C = my_matrix_alloc(pulsars[i].N_m,pulsars[i].N_m);
-	  pulsars[i].Cinv = my_matrix_alloc(pulsars[i].N_m,pulsars[i].N_m);
-	  pulsars[i].L = my_matrix_alloc(pulsars[i].N_m,pulsars[i].N_m);
-	  pulsars[i].GH = my_matrix_alloc(pulsars[i].N_m,2);
+	  //	  pulsars[i].C = my_matrix_alloc_count(&totalsize,pulsars[i].N_m,pulsars[i].N_m);
+	  pulsars[i].Cinv = my_matrix_alloc_count(&totalsize,pulsars[i].N_m,pulsars[i].N_m);
+	  pulsars[i].L = my_matrix_alloc_count(&totalsize,pulsars[i].N_m,pulsars[i].N_m);
+	  pulsars[i].GH = my_matrix_alloc_count(&totalsize,pulsars[i].N_m,2);
 	  
-	  pulsars[i].Gres = my_vector_alloc(pulsars[i].N_m);
+	  pulsars[i].Gres = my_vector_alloc_count(&totalsize,pulsars[i].N_m);
 	} //end if only_res == 0
       //Do this part always
 	  //Maybe i need to reobtain the desing matrix all the time, maybe not
@@ -383,8 +387,8 @@ void initialize_pulsars_fromtempo(pulsar * tempo_psrs, struct mypulsar * pulsars
 #ifdef REDNOISE
       //read in sampled data
 	  int xdim = 4+2*pulsars[i].n_be+1;
-	  pulsars[i].sample = my_matrix_alloc(xdim,N_SAMPLE_MAX);
-	  char infilename[100];
+	  pulsars[i].sample = my_matrix_alloc_count(&totalsize,xdim,N_SAMPLE_MAX);
+	  char infilename[120];
 	  sprintf(infilename,"%s/chains_Noise/Noise_post_equal_weights.dat",pulsars[i].name);
 	  if (verbose)
 	    printf("Opening %s\n",infilename);
@@ -431,18 +435,27 @@ void initialize_pulsars_fromtempo(pulsar * tempo_psrs, struct mypulsar * pulsars
 	  //  temp = *tspan;
 	  //temp = *tspan*1.18;                                                                                                                                                  
 	  double ffund = 1.0/(temp);
+	  double DMffund = 1.0/(1.0*temp);
 	  //set up frequency grid                                                                                                                                                
 	  for (b = 0; b < (NFFT/2); b++)
 	    {
 	      pulsars[i].freqs[b] = ffund*(b+1);
+	      pulsars[i].DMfreqs[b] = DMffund*(b+1);
 	      //      printf("%d\t%e\n",i,par->freqs[i]);
 	    }
 	  pulsars[i].tspan = temp;
-      
+	  pulsars[i].DMtspan = 1.0*temp;
+
+	  if (verbose == 4)
+	    printf("ALLOCATED %8.3f Mbyte for pulsar %20s\n",totalsize/1e6,pulsars[i].name);
+	  globsize += totalsize;
+
+	  if (verbose == 4)
+	    printf("TOTAL ALLOCATED %8.3f Mbyte\n",globsize/1e6);
+
 	}
 
     }
-
   if (verbose == 2)
     printf("Ndim is %d\n",*Ndim);
 }
@@ -451,7 +464,7 @@ void initialize_pulsars_fromtempo(pulsar * tempo_psrs, struct mypulsar * pulsars
 void initialize_fft_per_pulsar(struct mypulsar * psr, struct parameters * par)
 {
   int i,b;
-  double f;
+  double f,DMf;
   for (b = 0; b < psr->N; b++)
     {
       for (i = 0; i < (NFFT/2); i++)
@@ -464,8 +477,9 @@ void initialize_fft_per_pulsar(struct mypulsar * psr, struct parameters * par)
 	  psr->F->data[(row)*psr->F->m + b] = sin(2.0*PI*psr->toa->data[b]*f);///par->tspan;
 	  psr->F->data[(row_cos)*psr->F->m + b] = cos(2.0*PI*psr->toa->data[b]*f);///par->tspan;
 #ifdef DM
-	  psr->F->data[(row+NFFT)*psr->F->m + b] = 1.0/(K_DM*psr->obsfreqs->data[b]*psr->obsfreqs->data[b])*sin(2.0*PI*psr->toa->data[b]*f);///par->tspan;
-	  psr->F->data[(row_cos+NFFT)*psr->F->m +  b] = 1.0/(K_DM*psr->obsfreqs->data[b]*psr->obsfreqs->data[b])*cos(2.0*PI*psr->toa->data[b]*f);///par->tspan;
+	  DMf = psr->DMfreqs[i];
+	  psr->F->data[(row+NFFT)*psr->F->m + b] = 1.0/(K_DM*psr->obsfreqs->data[b]*psr->obsfreqs->data[b])*sin(2.0*PI*psr->toa->data[b]*DMf);///par->tspan;
+	  psr->F->data[(row_cos+NFFT)*psr->F->m +  b] = 1.0/(K_DM*psr->obsfreqs->data[b]*psr->obsfreqs->data[b])*cos(2.0*PI*psr->toa->data[b]*DMf);///par->tspan;
 #endif	  
 	}
     }
@@ -476,7 +490,7 @@ void initialize_fft_per_pulsar(struct mypulsar * psr, struct parameters * par)
 void calculate_phi_inv_per_pulsar(struct mypulsar * psr,struct parameters par)
 {
   int i,a,b;
-  double f;
+  double f,DMf;
   double power;
   //Red noise will change all the time, lets give it as two parameters
   //phi for one pulsar depends only on red noise
@@ -497,13 +511,14 @@ void calculate_phi_inv_per_pulsar(struct mypulsar * psr,struct parameters par)
       //add red noise for diagonal elements
       //      power = rfac * pow(f/3.17e-08,-rgamma)/psr->tspan;
       power = rfac * pow(f/3.17e-08,-rgamma)/psr->tspan;
-      psr->phi_inv->data[(2*i)*psr->phi_inv->m  + 2*i] = 1.0/power;
-      psr->phi_inv->data[(2*i+1)*psr->phi_inv->m + 2*i + 1] = 1.0/power;
+      psr->phi_inv->data[2*i] = 1.0/power;
+      psr->phi_inv->data[2*i+1] = 1.0/power;
 #ifdef DM
+      DMf = psr->DMfreqs[i];
       //      power = dmfac * pow(f/3.17e-08,-dmgamma)/psr->tspan;
-      power = dmfac * pow(f/3.17e-08,-dmgamma)/psr->tspan;
-      psr->phi_inv->data[(NFFT+2*i)*psr->phi_inv->m  + NFFT + 2*i] = 1.0/power;
-      psr->phi_inv->data[(NFFT+2*i+1)*psr->phi_inv->m + NFFT + 2*i + 1] = 1.0/power;
+      power = dmfac * pow(DMf/3.17e-08,-dmgamma)/psr->DMtspan;
+      psr->phi_inv->data[(NFFT+2*i)] = 1.0/power;
+      psr->phi_inv->data[(NFFT+2*i+1)] = 1.0/power;
 #endif
     }
 }
@@ -561,7 +576,7 @@ void compute_C_matrix(struct mypulsar * psr, struct parameters * par)
   FNF_lu = my_matrix_alloc(NFFT,NFFT);
 #endif
 
-  my_matrix_add(FNF,psr->phi_inv);
+  my_matrix_add_diagonal(FNF,psr->phi_inv);
   
   double detFNF;
 #ifdef DM
@@ -738,12 +753,16 @@ void create_noise_only(struct mypulsar * psr, gsl_rng * r)
     printf("Creating noise\n");
   struct my_matrix *Linv;
   Linv = my_matrix_alloc(psr->N_m,psr->N_m);
-  my_matrix_memcpy(psr->C,psr->Cinv);
+
+  struct my_matrix *C;
+  C = my_matrix_alloc(psr->N_m,psr->N_m);
+
+  my_matrix_memcpy(C,psr->Cinv);
   //  my_symcheck(psr->C);
   //call it twice to have in the end Linv the L of the C (stupid but working)
-  get_inverse_cholesky(psr->C,Linv,psr->N_m);
+  get_inverse_cholesky(C,Linv,psr->N_m);
   //  my_matrix_print("L\0",Linv);
-  get_inverse_cholesky(psr->C,psr->L,psr->N_m);
+  get_inverse_cholesky(C,psr->L,psr->N_m);
   
 //
 //
@@ -777,6 +796,7 @@ void create_noise_only(struct mypulsar * psr, gsl_rng * r)
   //  my_vector_print(psr->Gres);
   //done?
   my_matrix_free(Linv);
+  my_matrix_free(C);
 }
 
 struct Fp compute_Fp(struct mypulsar * pulsars, struct parameters * par, int Nplsr)
@@ -791,15 +811,15 @@ struct Fp compute_Fp(struct mypulsar * pulsars, struct parameters * par, int Npl
   //build matrices
   for (i = 0; i < Nplsr; i++)
     {
-      //use only pulsars with appropriate observation span
-      if ((1.0/pulsars[i].tspan) > (par->omega/(2.0*PI)))
-	{
-	  if (verbose)
-	    {
-	      printf("Skipping %s\t for freq %e, 1/tspan is \t%e\n",pulsars[i].name,par->omega/(2.0*PI),1.0/pulsars[i].tspan);
-	    }
-	  continue;
-	}
+//      //use only pulsars with appropriate observation span
+//      if ((1.0/pulsars[i].tspan) > (par->omega/(2.0*PI)))
+//	{
+//	  if (verbose)
+//	    {
+//	      printf("Skipping %s\t for freq %e, 1/tspan is \t%e\n",pulsars[i].name,par->omega/(2.0*PI),1.0/pulsars[i].tspan);
+//	    }
+//	  continue;
+//	}
       used++;
       //get inner product
       struct my_vector *Ct;
@@ -968,9 +988,12 @@ int main(int argc, char *argv[])
 //#else
 //  culaSelectDevice(0);
 #endif
-#ifdef UPPER
-  culaSelectDevice(1);
-#endif
+//#ifdef UPPER
+//  culaSelectDevice(0);
+//#endif
+//#ifdef GENNOISE
+//  culaSelectDevice(1);
+//#endif
 s = culaInitialize();
   if(s != culaNoError)
     {
@@ -994,12 +1017,14 @@ s = culaInitialize();
   //to hold all pulsar information, including individual G matrices
   struct mypulsar *pulsars;
   pulsar * tempo_psrs;
+#ifndef F0
   ofile = fopen(argv[1],"w");
+#endif
+  Nplsr = (argc-2);
 #ifdef UPPER
   Nplsr = (argc-4); //because 2nd and 3rd argument are frequency, amplitude and detection threshold
-#else
-  Nplsr = (argc-2);
 #endif
+
   //  filenames = (char **) malloc(Nplsr*sizeof(char *));
 
 //  timfilenames = (char **) malloc(Nplsr*sizeof(char *));
@@ -1017,13 +1042,13 @@ s = culaInitialize();
 #ifdef UPPER
       strcpy(pulsarname[i],argv[i+4]);
       sprintf(filenames[i],"%s/%s_mod.tim",pulsarname[i],pulsarname[i]);
-      sprintf(parfilenames[i],"SteveAllParTim_03-04-2014/%s.par",pulsarname[i],pulsarname[i]);
+      sprintf(parfilenames[i],"%s/%s.par",pulsarname[i],pulsarname[i]);
 #else
 //      strcpy(filenames[i],argv[i+2]);
 //      strcpy(parfilenames[i],argv[i+2+Nplsr]);
       strcpy(pulsarname[i],argv[i+2]);
       sprintf(filenames[i],"%s/%s_mod.tim",pulsarname[i],pulsarname[i]);
-      sprintf(parfilenames[i],"%s/%s.par",pulsarname[i],pulsarname[i]);
+      sprintf(parfilenames[i],"SteveAllParTim_03-04-2014/%s.par",pulsarname[i],pulsarname[i]);
 #endif
       if (verbose)
 	printf("Read %s\t%s\n",filenames[i],parfilenames[i]);
@@ -1033,12 +1058,12 @@ s = culaInitialize();
   readTimfile(tempo_psrs,filenames,Nplsr);
   preProcess(tempo_psrs,Nplsr,argc,argv);
 
-  for (i = 0; i < 2; i++)
+  for (i = 0; i < 3; i++)
     {
       formBatsAll(tempo_psrs,Nplsr);
       formResiduals(tempo_psrs,Nplsr,0);
 
-      if (i == 0)
+      //      if (i == 0)
 	doFitAll(tempo_psrs,Nplsr,0);
     }
 
@@ -1088,8 +1113,11 @@ s = culaInitialize();
 //      pulsars[i].rA = pow(10.0,-14.35);
 //      pulsars[i].rgamma = 1.52;
 //#endif
-      pulsars[i].index = pulsars[i].n_sample-NF0-5;
-      //      pulsars[i].index = 0;
+//#ifdef UPPER
+//      pulsars[i].index = pulsars[i].n_sample-NF0-5;
+//#else
+      pulsars[i].index = 0;
+//#endif
       compute_C_matrix(&(pulsars[i]),&params);
     }
 
@@ -1110,21 +1138,24 @@ s = culaInitialize();
   //create array of frequencies to be investigated
 #ifdef F0
   int nfreqs = 1;
-  double fstep = 0.01;
-  double fmin = log10(3.0e-7);
+  double fstep = 0.005;
+  double fmin = (atof(argv[1]));
   double * h_freqs;
 #else
-  double fstep = 0.01;
-  double fmin = log10(1.0/params.tspan);
-  double fmax = log10(5.e-07);
+  //  double fstep = 0.005;
+  double fmin = 2e-9;//(1.0/params.tspan);
+  double fstep = fmin;
+  double fmax = (2.e-07);
   double * h_freqs;
   int nfreqs = (int) ((fmax-fmin)/fstep);
+  printf("NFREQ %d\n",nfreqs);
 #endif
   h_freqs = (double *) malloc(nfreqs*sizeof(double));
   //fill freqs
   for (i = 0; i < nfreqs; i++)
     {
-      h_freqs[i] = pow(10.0,fmin + i*fstep);
+      //      h_freqs[i] = pow(10.0,fmin + i*fstep);
+      h_freqs[i] = fmin + i*fstep;
     }
   int ifreq;
 
@@ -1138,8 +1169,8 @@ s = culaInitialize();
 //      initialize_pulsars_fromtempo(tempo_psrs,pulsars,Nplsr,&Ndim,&Ntot,&params,1);
 //
 //    }
-  for (j = 0; j < Nplsr; j++)
-    compute_C_matrix(&(pulsars[j]),&params);
+//  for (j = 0; j < Nplsr; j++)
+//    compute_C_matrix(&(pulsars[j]),&params);
   Fp = compute_Fp(pulsars,&params,Nplsr);
 
   source_pars.Amp = 0.4*pow(10.0,atof(argv[3])); // factor of sqrt(5)/sqrt(2)/4
@@ -1157,24 +1188,25 @@ s = culaInitialize();
     {
       randomize_source(&source_pars,r);
 
-      for (j = 0; j < Nplsr; j++)
-	{
-	  pulsars[j].index = gsl_rng_uniform_int(r,pulsars[j].n_sample-1);;
-	}
+//      for (j = 0; j < Nplsr; j++)
+//	{
+//	  pulsars[j].index = gsl_rng_uniform_int(r,pulsars[j].n_sample-1);;
+//	}
 
-
-      for (j = 0; j < 1; j++)
+//      printf("Adding Signal\n");
+      for (j = 0; j < 2; j++)
 	{
 
 //      printf("preformBats\t%d\t%e\t%e\n",i,tempo_psrs[0].obsn[0].bat,tempo_psrs[0].obsn[1].bat);
+	  
 	  formBatsAll(tempo_psrs,Nplsr);
 	  //	  if (j == 0)
 	  add_signal(pulsars,tempo_psrs,params,source_pars,Nplsr);
       //      printf("Bats\t%d\t%e\n",i,tempo_psrs[0].obsn[4].bat);
 	  
 	  formResiduals(tempo_psrs,Nplsr,0);
-	  //	  if (j == 0)
-	  //  doFitAll(tempo_psrs,Nplsr,0);
+	  if (j == 0)
+	     doFitAll(tempo_psrs,Nplsr,0);
 	}
       initialize_pulsars_fromtempo(tempo_psrs,pulsars,Nplsr,&Ndim,&Ntot,&params,1);
 
@@ -1185,19 +1217,16 @@ s = culaInitialize();
 	    printf("RES\t%e\t%e\n",(double) pulsars[i].toa->data[j], (double) pulsars[i].res->data[j]);
 	  }
 #endif
-
-
-
-      for (j = 0; j < Nplsr; j++)
-	compute_C_matrix(&(pulsars[j]),&params);
+//      for (j = 0; j < Nplsr; j++)
+//	compute_C_matrix(&(pulsars[j]),&params);
+//      printf("Computing Fp\n");
       Fp = compute_Fp(pulsars,&params,Nplsr);
-      if (verbose == 4)
-	printf("%f\t%g\n",Fp.tHt,threshold);
+      fprintf(stderr,"%f\t%g\t%d\n",Fp.tHt,threshold,Fp.used);
       if (Fp.tHt > threshold)
 	detected++;
       total++;
 
-      //  fprintf(outfile,"% 6.4e\t% 6.4e\n",Fp.tCt,Fp.tHt);
+      //printf(outfile,"% 6.4e\t% 6.4e\n",Fp.tCt,Fp.tHt);
       //printf("% 6.4e\n",Fp.tHt);
     }
 
@@ -1221,8 +1250,15 @@ s = culaInitialize();
       params.omega = h_freqs[rank*n_per_proc + ifreq] *2.0*PI;
 #endif
 #ifdef F0
+#ifdef GENNOISE
+      for (j = 0; j < Nplsr; j++)
+	create_noise_only(&(pulsars[j]),r);
+      sprintf(oname,"%6.4e_generated.fp",params.omega/(2.0*PI));
+#else
       sprintf(oname,"%6.4e.fp",params.omega/(2.0*PI));
+#endif
       outfile = fopen(oname,"w");
+
       //      pulsars[0].index = 23;
       for (i = 0; i < NF0; i++)
 	{
@@ -1245,15 +1281,13 @@ s = culaInitialize();
 
     //    psr->Gres->data[i] = gsl_ran_gaussian(r,1.0);
 	  
-	  for (j = 0; j < Nplsr; j++)
-	    create_noise_only(&(pulsars[j]),r);
 	  //Do i want to create a new C for analyzing the things?
-	  for (j = 0; j < Nplsr; j++)
-	    {
-	      //	      pulsars[j].index += 2;
-	      pulsars[j].index = gsl_rng_uniform_int(r,pulsars[j].n_sample-1);
-	      compute_C_matrix(&(pulsars[j]),&params);
-	    }
+//	  for (j = 0; j < Nplsr; j++)
+//	    {
+//	      //	      pulsars[j].index += 2;
+//	      pulsars[j].index = gsl_rng_uniform_int(r,pulsars[j].n_sample-1);
+//	      compute_C_matrix(&(pulsars[j]),&params);
+//	    }
 
 
 	  tend = omp_get_wtime();
@@ -1287,7 +1321,11 @@ s = culaInitialize();
 #ifdef MPI
   if(rank ==0)
 #endif
+
+#ifndef F0
     fclose(ofile);
+#endif
+
 #ifdef MPI
   MPI_Finalize();
 #endif
