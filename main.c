@@ -17,7 +17,7 @@
 #endif
 
 #define verbose 0
-#define NFFT 800
+#define NFFT 200
 #define N_SAMPLE_MAX 28000
 #define MAX_PSR 45
 #define MAX_BE 30
@@ -1202,9 +1202,16 @@ s = culaInitialize();
 	  formBatsAll(tempo_psrs,Nplsr);
 	  //	  if (j == 0)
 	  add_signal(pulsars,tempo_psrs,params,source_pars,Nplsr);
-      //      printf("Bats\t%d\t%e\n",i,tempo_psrs[0].obsn[4].bat);
+	  //      printf("Bats\t%d\t%e\n",i,tempo_psrs[0].obsn[4].bat);
 	  
 	  formResiduals(tempo_psrs,Nplsr,0);
+
+	  if (i == 0)
+	    for (k = 0; k < pulsars[i].N; k++)
+	      {
+		printf("RES\t%e\t%e\n",(double) pulsars[0].toa->data[k], (double) pulsars[0].res->data[k]);
+	      }
+
 	  if (j == 0)
 	     doFitAll(tempo_psrs,Nplsr,0);
 	}
@@ -1221,7 +1228,7 @@ s = culaInitialize();
 //	compute_C_matrix(&(pulsars[j]),&params);
 //      printf("Computing Fp\n");
       Fp = compute_Fp(pulsars,&params,Nplsr);
-      fprintf(stderr,"%f\t%g\t%d\n",Fp.tHt,threshold,Fp.used);
+      //      fprintf(stderr,"%f\t%g\t%d\n",Fp.tHt,threshold,Fp.used);
       if (Fp.tHt > threshold)
 	detected++;
       total++;

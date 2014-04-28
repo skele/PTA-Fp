@@ -29,7 +29,7 @@ all: main.c
 upper: main.c
 	$(CC) $(CFLAGS) -o pca_upper $^ $(INC) -DUPPER
 uppercula: main.c
-	$(CC) $(CFLAGS) -o pca_upper $^ $(INCCULA) -lblas -DUPPER -DCULA
+	$(CC) $(CFLAGS) -o pca_upper_cula $^ $(INCCULA) -lblas -DUPPER -DCULA
 f0: main.c
 	$(CC) $(CFLAGS) -o pca_F0 $^ $(INC) -DF0
 f0cula: main.c
