@@ -57,24 +57,25 @@ struct my_matrix
 struct mypulsar
 {
   char name[50];
-  double raj,dec,tspan,det,dist;
+  double raj,dec,tspan,DMtspan,det,dist;
   int N,N_m,index;
   int n_be,n_sample;
   int * backends; //points to the first toa index for each backend
   //  double 
   double freqs[NFFT/2];
+  double DMfreqs[NFFT/2];
   double *sigma,*oldbat;
   double rA,rgamma;
   double dmA,dmgamma;
   double tNt;
-  struct my_matrix *G,*CWN,*GNGinv,*phi_inv,*F,*H,*C,*Cinv,*L,*FNF;
+  struct my_matrix *G,*CWN,*GNGinv,*F,*H,*C,*Cinv,*L,*FNF;
   struct my_matrix *GF,*GH,*sample;
-  struct my_vector *toa,*res,*Gres,*obsfreqs,*FNT;
+  struct my_vector *toa,*res,*Gres,*phi_inv,*obsfreqs,*FNT;
 };
 
 struct parameters
 {
-  double tspan;
+  double tspan,DMtspan;
   double omega;
   double values[NCOEFF];
   double tNt;
@@ -204,6 +205,20 @@ void my_vector_mult(struct my_vector * a, struct my_vector *b, double * result)
   *result = temp;
 }
 
+int my_matrix_add_diagonal(struct my_matrix * a, struct my_vector *b)
+{
+  int j;
+  if ((a->m != b->n) || (a->n != b->n))
+    {
+      printf("matrix add error: dimensions not the same\n");
+      return 1;
+    }
+  for (j = 0; j < a->n; j++)
+    a->data[j*a->m + j] += b->data[j];
+  return 0;
+
+}
+
 int my_matrix_add(struct my_matrix * a, struct my_matrix * b)
 {
   int i,j;
@@ -261,14 +276,53 @@ struct my_vector * my_vector_alloc(int n)
   return vec;
 }
 
+struct my_vector * my_vector_alloc_count(int *size, int n)
+{
+  struct my_vector * vec;
+  vec = (struct my_vector *) malloc(sizeof(struct my_vector));
+  vec->data = (double *) malloc(n*sizeof(double));
+  memset(vec->data,0.0,n*sizeof(double));
+  vec->n = n;
+
+  *size += n*sizeof(double);
+
+  return vec;
+}
+
 struct my_matrix * my_matrix_alloc( int m, int n)
 {
   struct my_matrix * mat;
   mat = (struct my_matrix *) malloc (sizeof(struct my_matrix));
   mat->data = (double *) malloc(n*m*sizeof(double));
+  if (mat->data == NULL)
+    {
+      fprintf(stderr,"Matrix cannot be allocated, size %d\n",n*m*sizeof(double));
+      return NULL;
+    }
   memset(mat->data,0.0,n*m*sizeof(double));
   mat->n = n;
   mat->m = m;
+  return mat;
+}
+
+struct my_matrix * my_matrix_alloc_count(int *size, int m, int n)
+{
+  struct my_matrix * mat;
+  mat = (struct my_matrix *) malloc (sizeof(struct my_matrix));
+  mat->data = (double *) malloc(n*m*sizeof(double));
+  if (mat->data == NULL)
+    {
+      fprintf(stderr,"Matrix cannot be allocated, size %d\n",n*m*sizeof(double));
+      return NULL;
+    }
+  memset(mat->data,0.0,n*m*sizeof(double));
+  mat->n = n;
+  mat->m = m;
+  *size += n*m*sizeof(double);
+
+  if (verbose)
+    printf("Allocated a total of %8.3f Mbyte\n",*size/1e6);
+
   return mat;
 }
 
