@@ -1,5 +1,5 @@
 ## Makefile                                                                                                                                                             
-CC=gcc
+CC=g++
 CFLAGS= -g#-O3# -pthread
  
 HOST:=$(shell hostname | cut -d . -f 1)
@@ -24,25 +24,25 @@ INC=-I$(TEMPO2)/include -I. -L$(TEMPO2)/lib -ltempo2 -lblas -llapack -lgsl -lgsl
 INCCULA=-I$(TEMPO2)/include -I. -I/home/pbrem/cula/include -L/home/pbrem/cula/lib64 -L$(TEMPO2)/lib -ltempo2 -lcudart  -lcublas -lcula_lapack -lgsl -lgslcblas -lm -lgomp
 endif
 
-all: main.c
+all: main.cpp
 	$(CC) $(CFLAGS) -o pca $^ $(INC)
-upper: main.c
+upper: main.cpp
 	$(CC) $(CFLAGS) -o pca_upper $^ $(INC) -DUPPER
-uppercula: main.c
+uppercula: main.cpp
 	$(CC) $(CFLAGS) -o pca_upper_cula $^ $(INCCULA) -lblas -DUPPER -DCULA
-f0: main.c
+f0: main.cpp
 	$(CC) $(CFLAGS) -o pca_F0 $^ $(INC) -DF0
-f0cula: main.c
+f0cula: main.cpp
 	$(CC) $(CFLAGS) -o pca_F0 $^ $(INCCULA) -lblas -DF0 -DCULA
-gencula: main.c
+gencula: main.cpp
 	$(CC) $(CFLAGS) -o pca_gen $^ $(INCCULA) -lblas -DF0 -DCULA -DGENNOISE
-fp: main.c
+fp: main.cpp
 	$(CC) $(CFLAGS) -o pca_Fp $^ $(INC) -lblas
-fpcula: main.c
+fpcula: main.cpp
 	$(CC) $(CFLAGS) -o pca_Fp $^ $(INCCULA) -lblas -DCULA
-cula: main.c
+cula: main.cpp
 	$(CC) $(CFLAGS) -o pca $^ $(INCCULA) -lblas -DCULA
-mpi: main.c
+mpi: main.cpp
 	mpicc $(CFLAGS) -o pca $^ $(INC) -DMPI
-culampi: main.c
+culampi: main.cpp
 	mpicc $(CFLAGS) -o pca_cula_mpi $^ $(INCCULA) -DMPI -lblas -DCULA
