@@ -18,11 +18,11 @@
 #endif
 
 #define verbose 0
-#define NFFT 200
+#define NFFT 100
 #define N_SAMPLE_MAX 28000
 #define MAX_PSR 45
 #define MAX_BE 30
-#define NF0 1000
+#define NF0 10
 //#define PRINTRES
 
 #include <mydefs.hpp>
@@ -1194,7 +1194,7 @@ s = culaInitialize();
 //	}
 
 //      printf("Adding Signal\n");
-      for (j = 0; j < 2; j++)
+      for (j = 0; j < 1; j++)
 	{
 
 //      printf("preformBats\t%d\t%e\t%e\n",i,tempo_psrs[0].obsn[0].bat,tempo_psrs[0].obsn[1].bat);
@@ -1206,14 +1206,14 @@ s = culaInitialize();
 	  
 	  formResiduals(tempo_psrs,Nplsr,0);
 
-	  if (i == 0)
-	    for (k = 0; k < pulsars[i].N; k++)
-	      {
-		printf("RES\t%e\t%e\n",(double) pulsars[0].toa->data[k], (double) pulsars[0].res->data[k]);
-	      }
-
-	  if (j == 0)
-	     doFitAll(tempo_psrs,Nplsr,0);
+//	  if (i == 0)
+//	    for (k = 0; k < pulsars[i].N; k++)
+//	      {
+//		printf("RES\t%e\t%e\n",(double) pulsars[0].toa->data[k], (double) pulsars[0].res->data[k]);
+//	      }
+//
+//	  if (j == 0)
+//	     doFitAll(tempo_psrs,Nplsr,0);
 	}
       initialize_pulsars_fromtempo(tempo_psrs,pulsars,Nplsr,&Ndim,&Ntot,&params,1);
 
