@@ -82,6 +82,7 @@ struct parameters
   //  double Agw, gamma_gw, fL;
   double l[NCOEFF];
   double u[NCOEFF];//double bound_Agw[2],bound_gamma_gw[2];
+  int * indices;
 };
 
 void print_residuals(char * prefix, struct mypulsar psr)
