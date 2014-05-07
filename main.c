@@ -17,11 +17,11 @@
 #endif
 
 #define verbose 0
-#define NFFT 200
+#define NFFT 100
 #define N_SAMPLE_MAX 28000
 #define MAX_PSR 45
 #define MAX_BE 30
-#define NF0 1000
+#define NF0 2000
 //#define PRINTRES
 
 #include <mydefs.h>
@@ -243,6 +243,24 @@ void initialize_pulsars_fromtempo(pulsar * tempo_psrs, struct mypulsar * pulsars
   *Ndim = 0;
   *Ntot = 0;
   int globsize = 0;
+
+#ifdef UPPER
+  //initialize a predefined sequence of indices to get specific C from the chain
+  if (only_res == 0)
+    {
+      FILE *indices_file;
+      indices_file = fopen("indices","r");
+      par->indices = (int *) malloc(Nplsr*NF0*sizeof(int));
+      for (i = 0; i < NF0; i++)
+	for (j = 0; j < Nplsr; j++)
+	  {
+	    fscanf(indices_file,"%d\t%d",&k,&(par->indices[i*Nplsr + j]));
+	  }
+      fclose(indices_file);
+    }
+#endif
+
+
   for (i = 0; i < Nplsr; i++)
     {
       pulsar * psr = &(tempo_psrs[i]);
@@ -263,16 +281,16 @@ void initialize_pulsars_fromtempo(pulsar * tempo_psrs, struct mypulsar * pulsars
 
 	  pulsars[i].toa = my_vector_alloc_count(&totalsize,pulsars[i].N);
 	  pulsars[i].sigma = (double *) malloc(pulsars[i].N * sizeof(double));
-//	  pulsars[i].oldbat = (double *) malloc(pulsars[i].N * sizeof(double));
+	  pulsars[i].oldbat = (double *) malloc(pulsars[i].N * sizeof(double));
 //	  pulsars[i].oldbbat = (double *) malloc(pulsars[i].N * sizeof(double));
 	}
       
       for (j = 0; j < pulsars[i].N; j++)
 	{
 	  pulsars[i].toa->data[j] = psr->obsn[j].bat*86400.0;
-//	      if (only_res == 0)
+	  if (only_res == 0)
 //		{
-//		  pulsars[i].oldbat[j] = psr->obsn[j].sat*86400.0;
+	    pulsars[i].oldbat[j] = psr->obsn[j].sat*86400.0;
 //		  pulsars[i].oldbbat[j] = psr->obsn[j].sat*86400.0;
 //		}
 	}
@@ -712,8 +730,10 @@ void add_signal(struct mypulsar *psr, pulsar * t_psr, struct parameters params, 
 
   for (i = 0; i < t_psr[p].nobs; i++)
     {
-      phase_e = om_0*(t_psr[p].obsn[i].bat*86400.0);
-      phase_p = om_p*(t_psr[p].obsn[i].bat*86400.0) + phi_a_phase;
+      //phase_e = om_0*(t_psr[p].obsn[i].sat*86400.0);
+      //phase_p = om_p*(t_psr[p].obsn[i].sat*86400.0) + phi_a_phase;
+      phase_e = om_0*(psr[p].oldbat[i]);
+      phase_p = om_p*(psr[p].oldbat[i]) + phi_a_phase;
 
       sn = sin(phase_e)/(om_0);
       cs = cos(phase_e)/(om_0);
@@ -721,12 +741,16 @@ void add_signal(struct mypulsar *psr, pulsar * t_psr, struct parameters params, 
       cs_p = cos(phase_p)/denom_2;
 
 #ifdef PRINTRES
-      printf("BAT\t%e\t%e\n",(double)t_psr[p].obsn[i].bat,(double)((a1*geo.Fac + a2*geo.Fas)*(sn_p - sn) + (a3*geo.Fac + a4*geo.Fas)*(cs_p -cs))/86400.0);
+      printf("BAT\t%e\t%e\t%e\n",(double)t_psr[p].obsn[i].sat,(double)psr[p].oldbat[i]/86400.0,(double)((a1*geo.Fac + a2*geo.Fas)*(sn_p - sn) + (a3*geo.Fac + a4*geo.Fas)*(cs_p -cs))/86400.0);
 #endif
 
       //add signal to the residual
-      t_psr[p].obsn[i].bat += ((a1*geo.Fac + a2*geo.Fas)*(sn_p - sn) + (a3*geo.Fac + a4*geo.Fas)*(cs_p -cs))/86400.0;
-      t_psr[p].obsn[i].bbat += ((a1*geo.Fac + a2*geo.Fas)*(sn_p - sn) + (a3*geo.Fac + a4*geo.Fas)*(cs_p -cs))/86400.0;
+      t_psr[p].obsn[i].sat = ( psr[p].oldbat[i] + (a1*geo.Fac + a2*geo.Fas)*(sn_p - sn) + (a3*geo.Fac + a4*geo.Fas)*(cs_p -cs))/86400.0;
+      //      t_psr[p].obsn[i].bbat += ((a1*geo.Fac + a2*geo.Fas)*(sn_p - sn) + (a3*geo.Fac + a4*geo.Fas)*(cs_p -cs))/86400.0;
+#ifdef PRINTRES
+      printf("BAT\t%e\t%e\t%e\n",(double)t_psr[p].obsn[i].sat,(double)psr[p].oldbat[i]/86400.0,(double)((a1*geo.Fac + a2*geo.Fas)*(sn_p - sn) + (a3*geo.Fac + a4*geo.Fas)*(cs_p -cs))/86400.0);
+#endif
+
     }
     }
 }
@@ -1041,15 +1065,13 @@ s = culaInitialize();
       //      filenames[i] = (char *) malloc(60*sizeof(char));
 #ifdef UPPER
       strcpy(pulsarname[i],argv[i+4]);
-      sprintf(filenames[i],"%s/%s_mod.tim",pulsarname[i],pulsarname[i]);
-      sprintf(parfilenames[i],"%s/%s.par",pulsarname[i],pulsarname[i]);
 #else
 //      strcpy(filenames[i],argv[i+2]);
 //      strcpy(parfilenames[i],argv[i+2+Nplsr]);
       strcpy(pulsarname[i],argv[i+2]);
+#endif
       sprintf(filenames[i],"%s/%s_mod.tim",pulsarname[i],pulsarname[i]);
       sprintf(parfilenames[i],"SteveAllParTim_03-04-2014/%s.par",pulsarname[i],pulsarname[i]);
-#endif
       if (verbose)
 	printf("Read %s\t%s\n",filenames[i],parfilenames[i]);
     }
@@ -1058,7 +1080,7 @@ s = culaInitialize();
   readTimfile(tempo_psrs,filenames,Nplsr);
   preProcess(tempo_psrs,Nplsr,argc,argv);
 
-  for (i = 0; i < 3; i++)
+  for (i = 0; i < 1; i++)
     {
       formBatsAll(tempo_psrs,Nplsr);
       formResiduals(tempo_psrs,Nplsr,0);
@@ -1095,7 +1117,9 @@ s = culaInitialize();
 
   gsl_rng *r;
   r = gsl_rng_alloc (gsl_rng_mt19937);
-  gsl_rng_set(r,time(NULL));
+  //ALWAYS initialize the same random sequence, this is on purpose
+  gsl_rng_set(r,1337);
+  //gsl_rng_set(r,time(NULL));
   /* ------------------------- */
 
   initialize_pulsars_fromtempo(tempo_psrs,pulsars,Nplsr,&Ndim,&Ntot,&params,0);
@@ -1173,7 +1197,7 @@ s = culaInitialize();
 //    compute_C_matrix(&(pulsars[j]),&params);
   Fp = compute_Fp(pulsars,&params,Nplsr);
 
-  source_pars.Amp = 0.4*pow(10.0,atof(argv[3])); // factor of sqrt(5)/sqrt(2)/4
+  source_pars.Amp = pow(10.0,atof(argv[3])); // factor of sqrt(5)/sqrt(2)/4
   source_pars.fr = params.omega/(2.0*PI);
   //compute to find out how many pulsars we are using here to get detection threshold value
   //  double threshs[45] = { 0.000000, 14.700000, 17.600000, 20.100000, 22.350000, 24.450000, 26.500000, 28.400000, 30.300000, 32.100000, 33.900000, 35.650000, 37.350000, 39.000000, 40.650000, 42.300000, 43.900000, 45.500000, 47.100000, 48.650000, 50.200000, 51.750000, 53.250000, 54.800000, 56.300000, 57.750000, 59.250000, 60.700000, 62.200000, 63.650000, 65.100000, 66.550000, 67.950000, 69.400000, 70.800000, 72.250000, 73.650000, 75.050000, 76.450000, 77.850000, 79.200000, 80.600000, 82.000000, 83.350000, 84.750000};
@@ -1188,57 +1212,47 @@ s = culaInitialize();
     {
       randomize_source(&source_pars,r);
 
-//      for (j = 0; j < Nplsr; j++)
-//	{
-//	  pulsars[j].index = gsl_rng_uniform_int(r,pulsars[j].n_sample-1);;
-//	}
-
-//      printf("Adding Signal\n");
+      for (j = 0; j < Nplsr; j++)
+	{
+	  //	  pulsars[j].index = gsl_rng_uniform_int(r,pulsars[j].n_sample-1);;
+#ifndef FIXC
+	  pulsars[j].index = params.indices[i*Nplsr + j];
+	  compute_C_matrix(&(pulsars[j]),&params);
+#endif
+	}
+      
       for (j = 0; j < 2; j++)
 	{
 
 //      printf("preformBats\t%d\t%e\t%e\n",i,tempo_psrs[0].obsn[0].bat,tempo_psrs[0].obsn[1].bat);
+	  if (j == 0)
+	    add_signal(pulsars,tempo_psrs,params,source_pars,Nplsr);
 	  
 	  formBatsAll(tempo_psrs,Nplsr);
 	  //	  if (j == 0)
-	  add_signal(pulsars,tempo_psrs,params,source_pars,Nplsr);
 	  //      printf("Bats\t%d\t%e\n",i,tempo_psrs[0].obsn[4].bat);
 	  
 	  formResiduals(tempo_psrs,Nplsr,0);
-
-	  if (i == 0)
-	    for (k = 0; k < pulsars[i].N; k++)
-	      {
-		printf("RES\t%e\t%e\n",(double) pulsars[0].toa->data[k], (double) pulsars[0].res->data[k]);
-	      }
-
 	  if (j == 0)
 	     doFitAll(tempo_psrs,Nplsr,0);
+
 	}
       initialize_pulsars_fromtempo(tempo_psrs,pulsars,Nplsr,&Ndim,&Ntot,&params,1);
-
-#ifdef PRINTRES
-      if (i == 0)
-	for (j = 0; j < pulsars[i].N; j++)
-	  {
-	    printf("RES\t%e\t%e\n",(double) pulsars[i].toa->data[j], (double) pulsars[i].res->data[j]);
-	  }
-#endif
-//      for (j = 0; j < Nplsr; j++)
-//	compute_C_matrix(&(pulsars[j]),&params);
 //      printf("Computing Fp\n");
       Fp = compute_Fp(pulsars,&params,Nplsr);
       //      fprintf(stderr,"%f\t%g\t%d\n",Fp.tHt,threshold,Fp.used);
       if (Fp.tHt > threshold)
 	detected++;
       total++;
-
-      //printf(outfile,"% 6.4e\t% 6.4e\n",Fp.tCt,Fp.tHt);
+#ifndef FIXC
+      fprintf(ofile,"% 6.4e\t% 6.4e\t%d\n",Fp.tCt,Fp.tHt,Fp.used);
+#endif
       //printf("% 6.4e\n",Fp.tHt);
     }
-
+#ifdef FIXC
   double fdetected = (double) detected / total;
   printf("DETECTED\t%f\n",fdetected);
+#endif
 
 #else
 
@@ -1306,7 +1320,7 @@ s = culaInitialize();
 	  if (verbose == 3)
 	    printf("compute_Fp \t%g\n",tend-tstart);
 	  fprintf(outfile,"% 6.4e\t% 6.4e\t%d\n",Fp.tCt,Fp.tHt,Fp.used);
-	  fflush(outfile);
+	  //fflush(outfile);
 	  //printf("% 6.4e\n",Fp.tHt);
 	}
 //      double tend_tot = omp_get_wtime();
