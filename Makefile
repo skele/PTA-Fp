@@ -33,6 +33,8 @@ all: main.c
 	$(CC) $(CFLAGS) -o pca $^ $(INC)
 upper: main.c
 	$(CC) $(CFLAGS) -o pca_upper $^ $(INC) -DUPPER
+upperfixC: main.c
+	$(CC) $(CFLAGS) -o pca_upper_fixC $^ $(INC) -DUPPER -DFIXC
 uppercula: main.c
 	$(CC) $(CFLAGS) -o pca_upper_cula $^ $(INCCULA) -lblas -DUPPER -DCULA
 f0: main.c

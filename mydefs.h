@@ -68,6 +68,7 @@ struct mypulsar
   double rA,rgamma;
   double dmA,dmgamma;
   double tNt;
+  observation * obsn;
   struct my_matrix *G,*CWN,*GNGinv,*F,*H,*C,*Cinv,*L,*FNF;
   struct my_matrix *GF,*GH,*sample;
   struct my_vector *toa,*res,*Gres,*phi_inv,*obsfreqs,*FNT;

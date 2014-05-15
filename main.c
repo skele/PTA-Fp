@@ -17,7 +17,7 @@
 #endif
 
 #define verbose 0
-#define NFFT 100
+#define NFFT 200
 #define N_SAMPLE_MAX 28000
 #define MAX_PSR 45
 #define MAX_BE 30
@@ -55,6 +55,16 @@
 //#define SWITCHEROO
 
 #define ETA 0.05
+
+void save_observations(pulsar * tempo_psrs, struct mypulsar * psrs, int Nplsr)
+{
+  int i;
+  for (i = 0; i < Nplsr; i++)
+    {
+      psrs[i].obsn = (observation *)malloc(sizeof(observation)*MAX_OBSN);
+      memcpy(psrs[i].obsn,tempo_psrs[i].obsn,MAX_OBSN*sizeof(observation));
+    }
+}
 
 void compute_Nwiggle(struct mypulsar * pulsar)
 {
@@ -244,22 +254,22 @@ void initialize_pulsars_fromtempo(pulsar * tempo_psrs, struct mypulsar * pulsars
   *Ntot = 0;
   int globsize = 0;
 
-#ifdef UPPER
-  //initialize a predefined sequence of indices to get specific C from the chain
-  if (only_res == 0)
-    {
-      FILE *indices_file;
-      indices_file = fopen("indices","r");
-      par->indices = (int *) malloc(Nplsr*NF0*sizeof(int));
-      for (i = 0; i < NF0; i++)
-	for (j = 0; j < Nplsr; j++)
-	  {
-	    fscanf(indices_file,"%d\t%d",&k,&(par->indices[i*Nplsr + j]));
-	  }
-      fclose(indices_file);
-    }
-#endif
-
+//#ifndef FIXC
+//  //initialize a predefined sequence of indices to get specific C from the chain
+//  if (only_res == 0)
+//    {
+//      FILE *indices_file;
+//      indices_file = fopen("indices","r");
+//      par->indices = (int *) malloc(Nplsr*NF0*sizeof(int));
+//      for (i = 0; i < NF0; i++)
+//	for (j = 0; j < Nplsr; j++)
+//	  {
+//	    fscanf(indices_file,"%d\t%d",&k,&(par->indices[i*Nplsr + j]));
+//	  }
+//      fclose(indices_file);
+//    }
+//#endif
+//
 
   for (i = 0; i < Nplsr; i++)
     {
@@ -730,10 +740,10 @@ void add_signal(struct mypulsar *psr, pulsar * t_psr, struct parameters params, 
 
   for (i = 0; i < t_psr[p].nobs; i++)
     {
-      //phase_e = om_0*(t_psr[p].obsn[i].sat*86400.0);
-      //phase_p = om_p*(t_psr[p].obsn[i].sat*86400.0) + phi_a_phase;
-      phase_e = om_0*(psr[p].oldbat[i]);
-      phase_p = om_p*(psr[p].oldbat[i]) + phi_a_phase;
+      phase_e = om_0*(t_psr[p].obsn[i].sat*86400.0);
+      phase_p = om_p*(t_psr[p].obsn[i].sat*86400.0) + phi_a_phase;
+      //phase_e = om_0*(psr[p].oldbat[i]);
+      //phase_p = om_p*(psr[p].oldbat[i]) + phi_a_phase;
 
       sn = sin(phase_e)/(om_0);
       cs = cos(phase_e)/(om_0);
@@ -745,7 +755,7 @@ void add_signal(struct mypulsar *psr, pulsar * t_psr, struct parameters params, 
 #endif
 
       //add signal to the residual
-      t_psr[p].obsn[i].sat = ( psr[p].oldbat[i] + (a1*geo.Fac + a2*geo.Fas)*(sn_p - sn) + (a3*geo.Fac + a4*geo.Fas)*(cs_p -cs))/86400.0;
+      t_psr[p].obsn[i].sat += ((a1*geo.Fac + a2*geo.Fas)*(sn_p - sn) + (a3*geo.Fac + a4*geo.Fas)*(cs_p -cs))/86400.0;
       //      t_psr[p].obsn[i].bbat += ((a1*geo.Fac + a2*geo.Fas)*(sn_p - sn) + (a3*geo.Fac + a4*geo.Fas)*(cs_p -cs))/86400.0;
 #ifdef PRINTRES
       printf("BAT\t%e\t%e\t%e\n",(double)t_psr[p].obsn[i].sat,(double)psr[p].oldbat[i]/86400.0,(double)((a1*geo.Fac + a2*geo.Fas)*(sn_p - sn) + (a3*geo.Fac + a4*geo.Fas)*(cs_p -cs))/86400.0);
@@ -1080,6 +1090,10 @@ s = culaInitialize();
   readTimfile(tempo_psrs,filenames,Nplsr);
   preProcess(tempo_psrs,Nplsr,argc,argv);
 
+  pulsars = (struct mypulsar *) malloc(MAX_PSR * sizeof(struct mypulsar));
+  //save observations
+  save_observations(tempo_psrs,pulsars,Nplsr);
+
   for (i = 0; i < 1; i++)
     {
       formBatsAll(tempo_psrs,Nplsr);
@@ -1094,7 +1108,6 @@ s = culaInitialize();
 //      printf("res\t%lg\n",(double) tempo_psrs[0].obsn[i].residual);
 //    }
 //
-  pulsars = (struct mypulsar *) malloc(MAX_PSR * sizeof(struct mypulsar));
 
   for (i = 0; i < Nplsr; i++)
     {
@@ -1214,17 +1227,19 @@ s = culaInitialize();
 
       for (j = 0; j < Nplsr; j++)
 	{
-	  //	  pulsars[j].index = gsl_rng_uniform_int(r,pulsars[j].n_sample-1);;
+	  memcpy(tempo_psrs[j].obsn,pulsars[j].obsn,MAX_OBSN*sizeof(observation));
 #ifndef FIXC
-	  pulsars[j].index = params.indices[i*Nplsr + j];
+	  pulsars[j].index = gsl_rng_uniform_int(r,pulsars[j].n_sample-1);;
+	  //	  pulsars[j].index = params.indices[i*Nplsr + j];
 	  compute_C_matrix(&(pulsars[j]),&params);
 #endif
 	}
+
       
       for (j = 0; j < 2; j++)
 	{
-
 //      printf("preformBats\t%d\t%e\t%e\n",i,tempo_psrs[0].obsn[0].bat,tempo_psrs[0].obsn[1].bat);
+
 	  if (j == 0)
 	    add_signal(pulsars,tempo_psrs,params,source_pars,Nplsr);
 	  
@@ -1240,7 +1255,7 @@ s = culaInitialize();
       initialize_pulsars_fromtempo(tempo_psrs,pulsars,Nplsr,&Ndim,&Ntot,&params,1);
 //      printf("Computing Fp\n");
       Fp = compute_Fp(pulsars,&params,Nplsr);
-      //      fprintf(stderr,"%f\t%g\t%d\n",Fp.tHt,threshold,Fp.used);
+      //fprintf(stderr,"%f\t%g\t%d\n",Fp.tHt,threshold,Fp.used);
       if (Fp.tHt > threshold)
 	detected++;
       total++;
